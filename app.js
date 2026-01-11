@@ -1,3 +1,12 @@
+// 1. IMPORT TRANSFORMERS V3 (The Fix)
+// We use the official Hugging Face CDN. This version supports the new architecture.
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.2.4';
+
+// 2. CONFIGURATION
+// Skip local model checks to force fetching the correct files from the Hub
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+
 // DOM Elements
 const uploadInput = document.getElementById('upload');
 const cropSection = document.getElementById('cropSection');
@@ -10,6 +19,7 @@ const photoCount = document.getElementById('photoCount');
 const qtyContainer = document.getElementById('qtyContainer');
 const processBtn = document.getElementById('processBtn');
 const statusContainer = document.getElementById('statusContainer');
+const statusText = document.getElementById('statusText');
 const resultSection = document.getElementById('resultSection');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -17,6 +27,7 @@ const downloadLink = document.getElementById('downloadLink');
 
 // State
 let cropper = null;
+let segmenter = null; // The AI Model
 
 // --- 1. HANDLE UPLOAD ---
 uploadInput.addEventListener('change', (e) => {
@@ -31,7 +42,8 @@ uploadInput.addEventListener('change', (e) => {
     optionsSection.classList.remove('hidden');
     actionSection.classList.remove('hidden');
     resultSection.classList.add('hidden');
-    updateStatus('', 'hidden');
+    
+    statusContainer.classList.add('hidden');
 
     const url = URL.createObjectURL(file);
     previewImage.src = url;
@@ -70,54 +82,85 @@ outputMode.addEventListener('change', () => {
     }
 });
 
-// --- 3. THE PROCESS ---
+// --- 3. AI PROCESSING (RMBG-1.4) ---
 processBtn.addEventListener('click', async () => {
     if (!cropper) return;
     processBtn.disabled = true;
 
     try {
-        // A. Get Crop
+        // A. Get High-Res Crop
         const croppedCanvas = cropper.getCroppedCanvas({
-            width: 1000,
-            height: 1000,
+            width: 1024, // High resolution for better AI accuracy
+            height: 1024,
+            imageSmoothingQuality: 'high'
         });
-        if (!croppedCanvas) throw new Error("Could not crop image.");
-        
-        // Convert to Blob for the AI
-        const imageBlob = await new Promise(r => croppedCanvas.toBlob(r, 'image/jpeg', 0.95));
+        const cropUrl = croppedCanvas.toDataURL('image/png');
 
-        // B. CHECK LIBRARY
-        if (typeof imglyRemoveBackground !== 'function') {
-            throw new Error("Library failed to load. Please hard-refresh the page.");
+        // B. Load Model (Lazy Load)
+        if (!segmenter) {
+            updateStatus("Downloading RMBG-1.4 Model (70MB)... This happens once.", true);
+            
+            // This is the SOTA model for background removal
+            segmenter = await pipeline('image-segmentation', 'briaai/RMBG-1.4', {
+                device: 'webgpu', // Try GPU first, fallback to CPU automatically
+            });
         }
 
-        // C. RUN AI (v1.2.1 Config)
-        updateStatus("Downloading AI Model (Wait ~30s)...", "bg-blue-100 text-blue-800 border-blue-200");
+        // C. Run Inference
+        updateStatus("AI is removing background...", true);
+        const output = await segmenter(cropUrl);
 
-        // We point explicitly to version 1.2.1 on UNPKG for the data files
-        const config = {
-            publicPath: "https://unpkg.com/@imgly/background-removal@1.2.1/dist/",
-            progress: (key, current, total) => {
-                const percent = Math.round((current / total) * 100);
-                if (percent) updateStatus(`AI Processing: ${percent}%`, "bg-purple-100 text-purple-800 border-purple-200");
-            }
-        };
-
-        const resultBlob = await imglyRemoveBackground(imageBlob, config);
-        const subjectImg = await loadImage(URL.createObjectURL(resultBlob));
-
-        // D. FINALIZE
-        updateStatus("Generating Final Output...", "bg-yellow-100 text-yellow-800 border-yellow-200");
-        finalizeOutput(subjectImg);
+        // D. Composite Result
+        updateStatus("Generating Final Sheet...", true);
+        
+        // The output is a list of masks. For this model, output[0] is the mask.
+        const mask = output[0].mask; 
+        await compositeImage(croppedCanvas, mask);
 
     } catch (error) {
         console.error(error);
-        updateStatus(`Error: ${error.message}`, "bg-red-100 text-red-800 border-red-200");
+        updateStatus(`Error: ${error.message}`, false);
         processBtn.disabled = false;
     }
 });
 
-// --- 4. SHEET GENERATION ---
+// --- 4. COMPOSITING ---
+async function compositeImage(originalCanvas, maskRawImage) {
+    // 1. Convert the AI mask (RawImage) to a Canvas
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = maskRawImage.width;
+    maskCanvas.height = maskRawImage.height;
+    const maskCtx = maskCanvas.getContext('2d');
+    
+    // Put mask data
+    const maskData = new ImageData(
+        new Uint8ClampedArray(maskRawImage.data),
+        maskRawImage.width,
+        maskRawImage.height
+    );
+    maskCtx.putImageData(maskData, 0, 0);
+
+    // 2. Create Composition Canvas
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = originalCanvas.width;
+    tempCanvas.height = originalCanvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // 3. Draw Mask (Grayscale)
+    // We scale the mask to match the original image size exactly
+    tempCtx.drawImage(maskCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+
+    // 4. Source-In (Keep only what overlaps with the white parts of the mask)
+    tempCtx.globalCompositeOperation = 'source-in';
+    tempCtx.drawImage(originalCanvas, 0, 0);
+
+    // 5. Load result as Image for final tiling
+    const subjectImg = new Image();
+    subjectImg.onload = () => finalizeOutput(subjectImg);
+    subjectImg.src = tempCanvas.toDataURL();
+}
+
+// --- 5. FINAL OUTPUT GENERATOR ---
 function finalizeOutput(subjectImg) {
     const isSingle = outputMode.value === 'single';
     const bg = document.getElementById('bgColor').value;
@@ -131,9 +174,9 @@ function finalizeOutput(subjectImg) {
         ctx.fillStyle = bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(subjectImg, 0, 0, targetW, targetH);
-        downloadLink.download = "passport-headshot.jpg";
+        downloadLink.download = "passport-headshot.png";
     } else {
-        // 4x6 inch @ 300 DPI
+        // 4x6 Sheet (1800x1200)
         canvas.width = 1800; 
         canvas.height = 1200;
         ctx.fillStyle = bg;
@@ -144,11 +187,12 @@ function finalizeOutput(subjectImg) {
         const rows = Math.floor(canvas.height / targetH);
         const limit = Math.min(reqCount, cols * rows);
 
+        // Centering
         const startX = (canvas.width - (cols * targetW)) / 2;
         const startY = (canvas.height - (rows * targetH)) / 2;
 
-        ctx.strokeStyle = '#cccccc';
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#e5e7eb'; // Light grey guide
+        ctx.lineWidth = 2;
 
         for (let i = 0; i < limit; i++) {
             const c = i % cols;
@@ -157,24 +201,26 @@ function finalizeOutput(subjectImg) {
             const y = startY + (r * targetH);
 
             ctx.drawImage(subjectImg, x, y, targetW, targetH);
+            
+            // Draw cutting guide ON TOP
             ctx.strokeRect(x, y, targetW, targetH);
         }
-        downloadLink.download = "passport-sheet-4x6.jpg";
+        downloadLink.download = "passport-sheet.jpg";
     }
 
-    downloadLink.href = canvas.toDataURL('image/jpeg', 1.0);
+    downloadLink.href = canvas.toDataURL('image/jpeg', 0.95);
+    
+    // UI Cleanup
+    statusContainer.classList.add('hidden');
     resultSection.classList.remove('hidden');
-    updateStatus("Success! Pro-Quality Render Complete.", "bg-green-100 text-green-800 border-green-200");
     processBtn.disabled = false;
     resultSection.scrollIntoView({ behavior: 'smooth' });
 }
 
-function updateStatus(msg, classes) {
-    statusContainer.className = `p-4 rounded-lg text-center text-sm font-bold border ${classes}`;
-    statusContainer.innerText = msg;
-    statusContainer.classList.toggle('hidden', !msg);
-}
-
-function loadImage(url) {
-    return new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = url; });
+function updateStatus(msg, showSpinner) {
+    statusContainer.classList.remove('hidden');
+    statusText.innerText = msg;
+    const spinner = statusContainer.querySelector('.spinner');
+    if (showSpinner) spinner.classList.remove('hidden');
+    else spinner.classList.add('hidden');
 }

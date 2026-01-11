@@ -15,90 +15,111 @@
             max-width: 100%;
             max-height: 500px;
         }
+        /* Loading Spinner Animation */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen py-10 px-4 font-sans">
 
-    <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-        <div class="bg-gray-900 p-6 text-center text-white">
-            <h1 class="text-2xl font-bold">Pro Passport Studio</h1>
-            <p class="text-gray-400 text-sm mt-1">High-Precision AI (v1.2.1 Stable)</p>
+    <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div class="bg-black p-6 text-center text-white">
+            <h1 class="text-2xl font-bold tracking-wide">PASSPORT STUDIO PRO</h1>
+            <p class="text-gray-400 text-xs mt-1 uppercase tracking-widest">Powered by RMBG-1.4 (State of the Art)</p>
         </div>
 
-        <div class="p-6 space-y-8">
-            <div>
-                <label class="block text-sm font-bold text-gray-700 mb-2">1. Upload Photo</label>
-                <input type="file" id="upload" accept="image/*" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer border rounded-lg p-1">
+        <div class="p-8 space-y-8">
+            <div class="border-b pb-8">
+                <label class="block text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">1. Upload Source Image</label>
+                <input type="file" id="upload" accept="image/*" class="block w-full text-sm text-slate-500 file:mr-4 file:py-3 file:px-6 file:rounded-full file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer border rounded-xl p-2 transition-all">
             </div>
 
-            <div id="cropSection" class="hidden space-y-4">
-                <div class="flex justify-between items-end border-b pb-2">
-                    <label class="block text-sm font-bold text-gray-700">2. Adjust Crop</label>
-                    <div class="text-right">
-                        <label class="block text-xs font-semibold text-gray-500 mb-1">Standard</label>
-                        <select id="countrySelect" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white focus:ring-2 focus:ring-indigo-500">
-                            <option value="1" data-w="600" data-h="600">US Passport (2x2")</option>
-                            <option value="0.77" data-w="413" data-h="531">UK/EU (35x45 mm)</option>
-                            <option value="0.68" data-w="390" data-h="567">China (33x48 mm)</option>
-                            <option value="0.71" data-w="413" data-h="531">Japan (35x45 mm)</option>
-                            <option value="0.7" data-w="591" data-h="827">Canada (50x70 mm)</option>
+            <div id="cropSection" class="hidden space-y-6 border-b pb-8">
+                <div class="flex flex-col md:flex-row justify-between items-end gap-4">
+                    <div class="flex-1 w-full">
+                        <label class="block text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">2. Precision Crop</label>
+                        <p class="text-xs text-gray-500 mb-2">Select your target country to lock the aspect ratio.</p>
+                    </div>
+                    <div class="w-full md:w-auto">
+                        <select id="countrySelect" class="w-full md:w-64 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-medium bg-white focus:ring-2 focus:ring-black focus:border-black outline-none transition-all">
+                            <option value="1" data-w="600" data-h="600">🇺🇸 US / Generic (2x2")</option>
+                            <option value="0.77" data-w="413" data-h="531">🇪🇺 UK / EU (35x45 mm)</option>
+                            <option value="0.68" data-w="390" data-h="567">🇨🇳 China (33x48 mm)</option>
+                            <option value="0.71" data-w="413" data-h="531">🇯🇵 Japan (35x45 mm)</option>
+                            <option value="0.7" data-w="591" data-h="827">🇨🇦 Canada (50x70 mm)</option>
                         </select>
                     </div>
                 </div>
                 
-                <div class="border-2 border-dashed border-gray-300 bg-gray-50 rounded-lg p-4 flex justify-center min-h-[300px]">
+                <div class="relative rounded-xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 min-h-[400px] flex items-center justify-center">
                     <div class="img-container w-full">
                         <img id="previewImage" src="" alt="Upload preview">
                     </div>
                 </div>
-                <p class="text-xs text-center text-gray-500">Drag box to frame head.</p>
             </div>
 
-            <div id="optionsSection" class="hidden border-t pt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div id="optionsSection" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6 border-b pb-8">
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Background</label>
-                    <div class="flex items-center gap-2 border rounded-lg p-2 bg-gray-50 hover:bg-white transition">
-                        <input type="color" id="bgColor" value="#ffffff" class="w-8 h-8 rounded border cursor-pointer">
-                        <span class="text-sm text-gray-600 font-medium">Select</span>
+                    <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">Background Color</label>
+                    <div class="flex items-center gap-3 border-2 border-gray-100 rounded-lg p-2 bg-white hover:border-gray-300 transition-colors">
+                        <input type="color" id="bgColor" value="#ffffff" class="w-10 h-10 rounded border-none cursor-pointer">
+                        <span class="text-sm font-medium text-gray-700">Select Color</span>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Format</label>
-                    <select id="outputMode" class="w-full h-10 border border-gray-300 rounded px-2 text-sm bg-white">
-                        <option value="sheet">4" x 6" Print Sheet</option>
+                    <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">Output Mode</label>
+                    <select id="outputMode" class="w-full h-[60px] border-2 border-gray-100 rounded-lg px-3 text-sm bg-white font-medium hover:border-gray-300 transition-colors">
+                        <option value="sheet">Print Sheet (4" x 6")</option>
                         <option value="single">Single Digital File</option>
                     </select>
                 </div>
                 <div id="qtyContainer">
-                    <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Count</label>
-                    <input type="number" id="photoCount" value="6" min="1" max="12" class="w-full h-10 border border-gray-300 rounded px-2 text-sm">
+                    <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">Quantity</label>
+                    <input type="number" id="photoCount" value="6" min="1" max="12" class="w-full h-[60px] border-2 border-gray-100 rounded-lg px-4 text-sm font-bold text-center hover:border-gray-300 transition-colors">
                 </div>
             </div>
 
-            <div id="actionSection" class="hidden pt-4">
-                <button id="processBtn" class="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-lg transition shadow-md flex justify-center items-center gap-2">
-                    <span>Remove Background & Generate</span>
+            <div id="actionSection" class="hidden pt-2">
+                <button id="processBtn" class="group w-full bg-black hover:bg-gray-800 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-xl flex justify-center items-center gap-3">
+                    <span class="text-lg">Generate Professional ID Photo</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                 </button>
             </div>
 
-            <div id="statusContainer" class="hidden p-4 rounded-lg text-center text-sm font-bold border transition-all"></div>
+            <div id="statusContainer" class="hidden p-6 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center gap-4">
+                <div class="spinner"></div>
+                <span id="statusText" class="text-blue-800 font-bold">Initializing AI...</span>
+            </div>
 
-            <div id="resultSection" class="hidden space-y-4 border-t pt-8">
-                <h3 class="font-bold text-gray-800 text-center">Final Result</h3>
-                <div class="p-2 bg-white border rounded shadow-sm flex justify-center overflow-auto">
-                    <canvas id="canvas" class="max-w-full h-auto shadow"></canvas>
+            <div id="resultSection" class="hidden space-y-6 pt-4 animation-fade-in">
+                <div class="flex items-center justify-center gap-2 mb-4">
+                    <div class="h-px bg-gray-200 w-full"></div>
+                    <span class="text-xs font-bold text-gray-400 uppercase whitespace-nowrap px-2">Final Result</span>
+                    <div class="h-px bg-gray-200 w-full"></div>
                 </div>
-                <a id="downloadLink" class="block w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-center py-4 rounded-xl shadow-lg transition transform active:scale-[0.98] cursor-pointer">
-                    Download Image
+                
+                <div class="p-4 bg-white border-2 border-gray-100 rounded-xl shadow-sm flex justify-center overflow-hidden">
+                    <canvas id="canvas" class="max-w-full h-auto shadow-md"></canvas>
+                </div>
+                
+                <a id="downloadLink" class="block w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-center py-4 rounded-xl shadow-lg transition-transform transform active:scale-[0.99] cursor-pointer">
+                    Download High-Res Image
                 </a>
             </div>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-
-    <script src="https://unpkg.com/@imgly/background-removal@1.2.1/dist/imgly-background-removal.js"></script>
-
-    <script src="app.js"></script>
+    
+    <script type="module" src="app.js"></script>
 </body>
 </html>
