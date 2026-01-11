@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passport Photo Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .passport-guide {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 160px; height: 220px;
+            border: 2px dashed rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            pointer-events: none;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+    </style>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/dist/browser/index.min.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center py-10 px-4">
+
+    <div class="max-w-xl w-full bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div class="bg-blue-600 p-6 text-center">
+            <h1 class="text-2xl font-bold text-white">Passport Photo Studio</h1>
+            <p class="text-blue-100 text-sm">Privacy First: Photos process on your device</p>
+        </div>
+
+        <div class="p-6 space-y-6">
+            <div class="relative w-full h-80 bg-gray-200 rounded-lg overflow-hidden flex items-center justify-center border-2 border-dashed border-gray-300 group">
+                <img id="previewImg" class="absolute w-full h-full object-contain hidden z-0">
+                <div id="guide" class="passport-guide hidden"></div>
+                
+                <div id="placeholder" class="text-center p-4 z-20">
+                    <p class="text-gray-500 font-medium">Click to upload or drag photo here</p>
+                    <p class="text-xs text-gray-400 mt-1">(Face should be clearly visible)</p>
+                </div>
+                
+                <input type="file" id="upload" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Background</label>
+                    <div class="flex items-center gap-2 border rounded-lg p-1 bg-gray-50">
+                        <input type="color" id="bgColor" value="#ffffff" class="w-8 h-8 rounded border-none cursor-pointer">
+                        <span class="text-sm text-gray-600">Choose Color</span>
+                    </div>
+                </div>
+                <div>
+                     <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Action</label>
+                     <button id="processBtn" disabled class="w-full h-10 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                        Process Photo
+                    </button>
+                </div>
+            </div>
+
+            <div id="statusContainer" class="hidden bg-blue-50 text-blue-700 px-4 py-3 rounded-lg text-sm font-medium text-center">
+                <span id="statusText">Initializing...</span>
+            </div>
+
+            <div id="resultArea" class="hidden space-y-4 pt-4 border-t">
+                <p class="text-center text-sm font-bold text-gray-700">Preview (4" x 6" Sheet)</p>
+                <canvas id="canvas" class="w-full shadow-lg border rounded"></canvas>
+                <a id="downloadLink" class="block w-full bg-green-600 hover:bg-green-700 text-white font-bold text-center py-3 rounded-lg shadow transition transform active:scale-95">
+                    Download Printable Sheet
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const upload = document.getElementById('upload');
+        const previewImg = document.getElementById('previewImg');
+        const placeholder = document.getElementById('placeholder');
+        const guide = document.getElementById('guide');
+        const processBtn = document.getElementById('processBtn');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusContainer = document.getElementById('statusContainer');
+        const statusText = document.getElementById('statusText');
+        const downloadLink = document.getElementById('downloadLink');
+
+        // Handle Image Upload
+        upload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                previewImg.src = url;
+                previewImg.classList.remove('hidden');
+                guide.classList.remove('hidden');
+                placeholder.classList.add('hidden');
+                processBtn.disabled = false;
+            }
+        });
+
+        // Main Processing Function
+        processBtn.addEventListener('click', async () => {
+            const file = upload.files[0];
+            if (!file) return;
+
+            // Reset UI
+            processBtn.disabled = true;
+            statusContainer.classList.remove('hidden');
+            statusText.innerText = "Step 1/3: Downloading AI Model (Wait ~30s)...";
+
+            try {
+                // CONFIGURATION
+                // We point the library to the specific 'data' package for models
+                const config = {
+                    publicPath: "https://cdn.jsdelivr.net/npm/@imgly/background-removal-data@1.5.5/dist/",
+                    progress: (key, current, total) => {
+                        const percent = Math.round((current / total) * 100);
+                        if (total > 0) statusText.innerText = `Loading AI Engine: ${percent}%`;
+                    }
+                };
+
+                // 1. REMOVE BACKGROUND
+                // 'imgly' is global because of the script tag in <head>
+                if (typeof imgly === 'undefined') throw new Error("Library failed to load.");
+                
+                statusText.innerText = "Step 2/3: Removing Background...";
+                const blob = await imgly.removeBackground(file, config);
+                const imgUrl = URL.createObjectURL(blob);
+                const subjectImg = await loadImage(imgUrl);
+
+                statusText.innerText = "Step 3/3: Creating Print Sheet...";
+
+                // 2. SETUP CANVAS (4x6 inches @ 300 DPI)
+                canvas.width = 1800;
+                canvas.height = 1200;
+
+                // 3. FILL BACKGROUND
+                ctx.fillStyle = document.getElementById('bgColor').value;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // 4. TILE IMAGES (6 Photos)
+                const size = 600; // 2 inches @ 300 DPI
+                for (let i = 0; i < 6; i++) {
+                    const x = (i % 3) * size;
+                    const y = Math.floor(i / 3) * size;
+
+                    // Center Crop logic
+                    const minDim = Math.min(subjectImg.width, subjectImg.height);
+                    const sx = (subjectImg.width - minDim) / 2;
+                    const sy = (subjectImg.height - minDim) / 2;
+
+                    ctx.drawImage(subjectImg, sx, sy, minDim, minDim, x, y, size, size);
+                }
+
+                // 5. FINISH
+                const finalUrl = canvas.toDataURL("image/jpeg", 0.95);
+                downloadLink.href = finalUrl;
+                downloadLink.download = "passport-sheet.jpg";
+                
+                document.getElementById('resultArea').classList.remove('hidden');
+                statusText.innerText = "Success! Image processed locally.";
+                statusContainer.classList.replace('bg-blue-50', 'bg-green-50');
+                statusContainer.classList.replace('text-blue-700', 'text-green-700');
+
+            } catch (error) {
+                console.error(error);
+                statusText.innerText = "Error: " + error.message;
+                statusContainer.classList.replace('bg-blue-50', 'bg-red-50');
+                statusContainer.classList.replace('text-blue-700', 'text-red-700');
+            } finally {
+                processBtn.disabled = false;
+            }
+        });
+
+        function loadImage(url) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.src = url;
+            });
+        }
+    </script>
+</body>
+</html>
