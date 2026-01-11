@@ -12,8 +12,28 @@ const downloadLink = document.getElementById('downloadLink');
 
 // Global Variables
 let cropper = null;
+let selfieSegmentation = null;
 
-// --- 1. HANDLE UPLOAD ---
+// --- 1. SETUP GOOGLE AI ---
+// This initializes the MediaPipe solution
+function initMediaPipe() {
+    if (selfieSegmentation) return; // Already loaded
+
+    selfieSegmentation = new SelfieSegmentation({
+        locateFile: (file) => {
+            // Point to Google's reliable CDN for the model files
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
+        }
+    });
+
+    selfieSegmentation.setOptions({
+        modelSelection: 1, // 0 = Fast, 1 = High Quality
+    });
+
+    selfieSegmentation.onResults(onAIResults);
+}
+
+// --- 2. HANDLE UPLOAD ---
 uploadInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -49,52 +69,37 @@ function initCropper() {
         cropBoxResizable: true,
     });
     
+    // Initialize AI in background so it's ready
+    initMediaPipe();
     processBtn.disabled = false;
 }
 
-// --- 2. HANDLE COUNTRY CHANGE ---
+// --- 3. HANDLE COUNTRY CHANGE ---
 countrySelect.addEventListener('change', () => {
     if (cropper) {
         cropper.setAspectRatio(parseFloat(countrySelect.value));
     }
 });
 
-// --- 3. PROCESS BUTTON ---
+// --- 4. PROCESS BUTTON ---
 processBtn.addEventListener('click', async () => {
-    if (!cropper) return;
+    if (!cropper || !selfieSegmentation) return;
 
     processBtn.disabled = true;
-    updateStatus("Initializing...", "bg-blue-50 text-blue-700 border-blue-200");
+    updateStatus("Processing with Google AI...", "bg-blue-50 text-blue-700 border-blue-200");
 
     try {
+        // Get high-res crop
         const croppedCanvas = cropper.getCroppedCanvas({
-            width: 1000,
-            height: 1000,
+            width: 800, // Good balance for MediaPipe
+            height: 800,
         });
+
         if (!croppedCanvas) throw new Error("Could not crop image.");
-        const imageBlob = await new Promise(r => croppedCanvas.toBlob(r, 'image/jpeg', 0.95));
 
-        // --- THE FIX: ESM.SH ---
-        updateStatus("Downloading Library...", "bg-yellow-50 text-yellow-700 border-yellow-200");
-        
-        // This specific URL bundles 'lodash' so the SyntaxError goes away
-        const { removeBackground } = await import("https://esm.sh/@imgly/background-removal@1.5.5");
-
-        // --- THE FIX: JSDELIVR ---
-        // We switched from UNPKG to JSDelivr to fix the CORS/404 errors for the models
-        const config = {
-            publicPath: "https://cdn.jsdelivr.net/npm/@imgly/background-removal-data@1.5.5/dist/",
-            progress: (key, current, total) => {
-                const percent = Math.round((current / total) * 100);
-                if (percent) updateStatus(`AI Processing: ${percent}%`, "bg-yellow-50 text-yellow-700 border-yellow-200");
-            }
-        };
-
-        const removedBgBlob = await removeBackground(imageBlob, config);
-        const subjectImg = await loadImage(URL.createObjectURL(removedBgBlob));
-
-        updateStatus("Generating Sheet...", "bg-blue-50 text-blue-700 border-blue-200");
-        generateSheet(subjectImg);
+        // Send to MediaPipe
+        // This triggers 'onAIResults' when done
+        await selfieSegmentation.send({image: croppedCanvas});
 
     } catch (error) {
         console.error(error);
@@ -103,11 +108,43 @@ processBtn.addEventListener('click', async () => {
     }
 });
 
-// --- 4. TILE GENERATOR ---
+// --- 5. AI RESULT HANDLER ---
+function onAIResults(results) {
+    // MediaPipe returns:
+    // results.image (Original)
+    // results.segmentationMask (The 'Cutout' Map)
+    
+    updateStatus("Generating Sheet...", "bg-yellow-50 text-yellow-700 border-yellow-200");
+
+    // 1. Create a temporary canvas to composite the result
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = results.image.width;
+    tempCanvas.height = results.image.height;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // 2. Draw the Mask
+    tempCtx.drawImage(results.segmentationMask, 0, 0, tempCanvas.width, tempCanvas.height);
+
+    // 3. Composite: Keep only the person (source-in)
+    // Everything that is 'white' in the mask keeps the image.
+    // Everything 'black' becomes transparent.
+    tempCtx.globalCompositeOperation = 'source-in';
+    tempCtx.drawImage(results.image, 0, 0, tempCanvas.width, tempCanvas.height);
+
+    // 4. Create an Image object from this result
+    const subjectImg = new Image();
+    subjectImg.onload = () => {
+        generateSheet(subjectImg);
+    };
+    subjectImg.src = tempCanvas.toDataURL();
+}
+
+// --- 6. TILE GENERATOR ---
 function generateSheet(subjectImg) {
     canvas.width = 1800;
     canvas.height = 1200;
 
+    // Fill Background Color (User Selection)
     ctx.fillStyle = document.getElementById('bgColor').value;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -141,8 +178,4 @@ function updateStatus(msg, classes) {
     statusContainer.className = `p-4 rounded-lg text-center text-sm font-bold border ${classes}`;
     statusContainer.innerText = msg;
     statusContainer.classList.toggle('hidden', !msg);
-}
-
-function loadImage(url) {
-    return new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = url; });
 }

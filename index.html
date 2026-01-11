@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Passport Photo Studio</title>
     <link rel="shortcut icon" href="#">
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 
     <style>
         .img-container img {
@@ -23,7 +22,7 @@
     <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
         <div class="bg-indigo-700 p-6 text-center text-white">
             <h1 class="text-2xl font-bold">Passport Photo Studio</h1>
-            <p class="text-indigo-100 text-sm mt-1">100% Client-Side Privacy</p>
+            <p class="text-indigo-100 text-sm mt-1">Powered by Google MediaPipe</p>
         </div>
 
         <div class="p-6 space-y-8">
@@ -85,6 +84,10 @@
         </div>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+
+    <script src="app.js"></script>
 </body>
 </html>
