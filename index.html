@@ -22,7 +22,7 @@
     <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
         <div class="bg-indigo-700 p-6 text-center text-white">
             <h1 class="text-2xl font-bold">Passport Photo Studio</h1>
-            <p class="text-indigo-100 text-sm mt-1">Powered by Google MediaPipe</p>
+            <p class="text-indigo-100 text-sm mt-1">Google MediaPipe Technology</p>
         </div>
 
         <div class="p-6 space-y-8">
@@ -35,13 +35,13 @@
                 <div class="flex justify-between items-end border-b pb-2">
                     <label class="block text-sm font-bold text-gray-700">2. Adjust Crop</label>
                     <div class="text-right">
-                        <label class="block text-xs font-semibold text-gray-500 mb-1">Target Country</label>
+                        <label class="block text-xs font-semibold text-gray-500 mb-1">Photo Standard</label>
                         <select id="countrySelect" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white focus:ring-2 focus:ring-indigo-500">
-                            <option value="1">US Passport (2x2 inch)</option>
-                            <option value="0.77">UK/EU (35x45 mm)</option>
-                            <option value="0.68">China (33x48 mm)</option>
-                            <option value="0.71">Japan (35x45 mm)</option>
-                            <option value="0.7">Canada (50x70 mm)</option>
+                            <option value="1" data-w="600" data-h="600">US Passport (2x2 inch)</option>
+                            <option value="0.77" data-w="413" data-h="531">UK/EU (35x45 mm)</option>
+                            <option value="0.68" data-w="390" data-h="567">China (33x48 mm)</option>
+                            <option value="0.71" data-w="413" data-h="531">Japan (35x45 mm)</option>
+                            <option value="0.7" data-w="591" data-h="827">Canada (50x70 mm)</option>
                         </select>
                     </div>
                 </div>
@@ -54,7 +54,7 @@
                 <p class="text-xs text-center text-gray-500">Drag blue box to frame head.</p>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+            <div id="optionsSection" class="hidden border-t pt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                     <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Background</label>
                     <div class="flex items-center gap-2 border rounded-lg p-2 bg-gray-50 hover:bg-white transition">
@@ -62,32 +62,43 @@
                         <span class="text-sm text-gray-600 font-medium">Select Color</span>
                     </div>
                 </div>
+
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Process</label>
-                    <button id="processBtn" disabled class="w-full h-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md">
-                        Generate 4x6 Sheet
-                    </button>
+                    <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Output Format</label>
+                    <select id="outputMode" class="w-full h-10 border border-gray-300 rounded px-2 text-sm bg-white">
+                        <option value="sheet">4" x 6" Print Sheet</option>
+                        <option value="single">Single Headshot File</option>
+                    </select>
                 </div>
+
+                <div id="qtyContainer">
+                    <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Quantity (On Sheet)</label>
+                    <input type="number" id="photoCount" value="6" min="1" max="10" class="w-full h-10 border border-gray-300 rounded px-2 text-sm">
+                </div>
+            </div>
+
+            <div id="actionSection" class="hidden pt-4">
+                <button id="processBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition shadow-md">
+                    Process Photo
+                </button>
             </div>
 
             <div id="statusContainer" class="hidden p-4 rounded-lg text-center text-sm font-bold border"></div>
 
             <div id="resultSection" class="hidden space-y-4 border-t pt-8">
-                <h3 class="font-bold text-gray-800 text-center">Printable Sheet (4" x 6")</h3>
-                <div class="p-2 bg-white border rounded shadow-sm">
-                    <canvas id="canvas" class="w-full"></canvas>
+                <h3 id="resultTitle" class="font-bold text-gray-800 text-center">Result Preview</h3>
+                <div class="p-2 bg-white border rounded shadow-sm flex justify-center">
+                    <canvas id="canvas" class="max-w-full h-auto shadow"></canvas>
                 </div>
                 <a id="downloadLink" class="block w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-center py-4 rounded-xl shadow-lg transition transform active:scale-[0.98] cursor-pointer">
-                    Download Image
+                    Download Result
                 </a>
             </div>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
-
     <script src="app.js"></script>
 </body>
 </html>

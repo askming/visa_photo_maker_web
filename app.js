@@ -1,8 +1,13 @@
 // DOM Elements
 const uploadInput = document.getElementById('upload');
 const cropSection = document.getElementById('cropSection');
+const optionsSection = document.getElementById('optionsSection');
+const actionSection = document.getElementById('actionSection');
 const previewImage = document.getElementById('previewImage');
 const countrySelect = document.getElementById('countrySelect');
+const outputMode = document.getElementById('outputMode');
+const photoCount = document.getElementById('photoCount');
+const qtyContainer = document.getElementById('qtyContainer');
 const processBtn = document.getElementById('processBtn');
 const statusContainer = document.getElementById('statusContainer');
 const resultSection = document.getElementById('resultSection');
@@ -23,11 +28,7 @@ function initMediaPipe() {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
         }
     });
-
-    selfieSegmentation.setOptions({
-        modelSelection: 1, // 1 = High Quality
-    });
-
+    selfieSegmentation.setOptions({ modelSelection: 1 }); // High Quality
     selfieSegmentation.onResults(onAIResults);
 }
 
@@ -41,6 +42,8 @@ uploadInput.addEventListener('change', (e) => {
         cropper = null;
     }
     cropSection.classList.remove('hidden');
+    optionsSection.classList.remove('hidden');
+    actionSection.classList.remove('hidden');
     resultSection.classList.add('hidden');
     updateStatus('', 'hidden');
 
@@ -71,10 +74,18 @@ function initCropper() {
     processBtn.disabled = false;
 }
 
-// --- 3. HANDLE COUNTRY CHANGE ---
+// --- 3. UI HANDLERS ---
 countrySelect.addEventListener('change', () => {
     if (cropper) {
         cropper.setAspectRatio(parseFloat(countrySelect.value));
+    }
+});
+
+outputMode.addEventListener('change', () => {
+    if (outputMode.value === 'single') {
+        qtyContainer.classList.add('hidden');
+    } else {
+        qtyContainer.classList.remove('hidden');
     }
 });
 
@@ -83,16 +94,17 @@ processBtn.addEventListener('click', async () => {
     if (!cropper || !selfieSegmentation) return;
 
     processBtn.disabled = true;
-    updateStatus("Processing (Shrinking Edges to Remove Noise)...", "bg-blue-50 text-blue-700 border-blue-200");
+    updateStatus("Processing (Smooth Mode)...", "bg-blue-50 text-blue-700 border-blue-200");
 
     try {
+        // Get crop (High Quality)
         const croppedCanvas = cropper.getCroppedCanvas({
-            width: 800,
+            width: 800, 
             height: 800,
+            imageSmoothingQuality: 'high'
         });
 
         if (!croppedCanvas) throw new Error("Could not crop image.");
-
         await selfieSegmentation.send({image: croppedCanvas});
 
     } catch (error) {
@@ -102,110 +114,110 @@ processBtn.addEventListener('click', async () => {
     }
 });
 
-// --- 5. AI RESULT HANDLER (The "Shrink & Soften" Fix) ---
+// --- 5. AI RESULT HANDLER (Restored Smoothness) ---
 function onAIResults(results) {
-    updateStatus("Creating Sheet with Cutting Guides...", "bg-yellow-50 text-yellow-700 border-yellow-200");
+    updateStatus("Generating Final Output...", "bg-yellow-50 text-yellow-700 border-yellow-200");
 
-    const width = results.image.width;
-    const height = results.image.height;
-
-    // 1. Prepare Layers
-    const maskCanvas = document.createElement('canvas');
-    maskCanvas.width = width;
-    maskCanvas.height = height;
-    const maskCtx = maskCanvas.getContext('2d');
-
-    // 2. SMART EROSION (The "Shrink" Step)
-    // First, draw the raw mask
-    maskCtx.drawImage(results.segmentationMask, 0, 0, width, height);
-    
-    // Apply a blur. This spreads the edge pixels out.
-    // By cutting ONLY the very high-confidence pixels later, we effectively 
-    // "shave off" the outer blurry layer, shrinking the mask.
-    maskCtx.filter = 'blur(4px)'; 
-    maskCtx.drawImage(maskCanvas, 0, 0);
-    maskCtx.filter = 'none'; // Reset
-
-    // 3. APPLY THRESHOLD & COMPOSITE
+    // 1. Setup Temp Canvas
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width;
-    tempCanvas.height = height;
+    tempCanvas.width = results.image.width;
+    tempCanvas.height = results.image.height;
     const tempCtx = tempCanvas.getContext('2d');
 
-    // Draw the blurred mask
-    tempCtx.drawImage(maskCanvas, 0, 0);
+    // 2. Draw Mask
+    // We removed the "Erosion/Threshold" loop here. 
+    // This goes back to the standard smooth mask you liked.
+    tempCtx.drawImage(results.segmentationMask, 0, 0, tempCanvas.width, tempCanvas.height);
 
-    // Get pixel data to apply the "High Threshold"
-    const imageData = tempCtx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-
-    for (let i = 0; i < data.length; i += 4) {
-        const confidence = data[i]; // Red channel
-        
-        // AGGRESSIVE CUT: Only keep pixels that are extremely confident (>200/255).
-        // Because we blurred it first, this high threshold forces the edge 
-        // to retreat inward, removing the "halo" noise.
-        if (confidence > 200) { 
-            data[i+3] = 255; // Keep Opaque
-        } else {
-            data[i+3] = 0;   // Delete Transparent
-        }
-    }
-    tempCtx.putImageData(imageData, 0, 0);
-
-    // 4. Draw the original person inside this "Shrunk" mask
+    // 3. Composite Person
     tempCtx.globalCompositeOperation = 'source-in';
-    tempCtx.drawImage(results.image, 0, 0);
+    tempCtx.drawImage(results.image, 0, 0, tempCanvas.width, tempCanvas.height);
 
-    // 5. Generate Final Sheet
+    // 4. Generate Final Result
     const subjectImg = new Image();
     subjectImg.onload = () => {
-        generateSheet(subjectImg);
+        finalizeOutput(subjectImg);
     };
     subjectImg.src = tempCanvas.toDataURL();
 }
 
-// --- 6. TILE GENERATOR (With Cutting Guides) ---
-function generateSheet(subjectImg) {
-    canvas.width = 1800;
-    canvas.height = 1200;
-
-    // Fill Background
-    ctx.fillStyle = document.getElementById('bgColor').value;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const size = 600; 
+// --- 6. FINAL GENERATION (Single or Sheet) ---
+function finalizeOutput(subjectImg) {
+    const isSingle = outputMode.value === 'single';
+    const bg = document.getElementById('bgColor').value;
     
-    // Fit image logic
-    const ratio = subjectImg.width / subjectImg.height;
-    let dw, dh;
-    
-    if (ratio > 1) { dw = size; dh = size / ratio; }
-    else { dh = size; dw = size * ratio; }
+    // Get target dimensions from the select dropdown data attributes
+    const option = countrySelect.options[countrySelect.selectedIndex];
+    // Dimensions in pixels @ 300 DPI
+    const targetW = parseInt(option.dataset.w) || 600;
+    const targetH = parseInt(option.dataset.h) || 600;
 
-    const ox = (size - dw) / 2;
-    const oy = (size - dh) / 2;
-
-    for (let i = 0; i < 6; i++) {
-        const gx = (i % 3) * size;
-        const gy = Math.floor(i / 3) * size;
-
-        // 1. Draw Photo
-        ctx.drawImage(subjectImg, gx + ox, gy + oy, dw, dh);
+    if (isSingle) {
+        // --- SINGLE HEADSHOT MODE ---
+        canvas.width = targetW;
+        canvas.height = targetH;
         
-        // 2. Draw Cutting Guide (Light Grey Border)
-        // We draw this AFTER the photo to ensure it sits on top
-        ctx.strokeStyle = '#d1d5db'; // Tailwind gray-300
-        ctx.lineWidth = 2;           // Thin line for cutting
-        ctx.strokeRect(gx, gy, size, size);
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(subjectImg, 0, 0, targetW, targetH);
+        
+        downloadLink.download = "passport-headshot.jpg";
+    } 
+    else {
+        // --- 4x6 SHEET MODE ---
+        // 4x6 inches @ 300 DPI = 1200x1800 (Landscape)
+        canvas.width = 1800; 
+        canvas.height = 1200;
+
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Tiling Logic
+        const reqCount = parseInt(photoCount.value) || 6;
+        
+        // Calculate max columns/rows
+        const cols = Math.floor(canvas.width / targetW);
+        const rows = Math.floor(canvas.height / targetH);
+        const maxFit = cols * rows;
+        
+        // Use user count, but don't exceed what physically fits
+        const limit = Math.min(reqCount, maxFit);
+
+        // Calculate centering offsets (margin)
+        const totalW = cols * targetW;
+        const totalH = rows * targetH;
+        const marginX = (canvas.width - totalW) / 2;
+        const marginY = (canvas.height - totalH) / 2;
+
+        ctx.strokeStyle = '#cccccc'; // Grey cutting guide
+        ctx.lineWidth = 2;
+
+        for (let i = 0; i < limit; i++) {
+            const c = i % cols;
+            const r = Math.floor(i / cols);
+            
+            const x = marginX + (c * targetW);
+            const y = marginY + (r * targetH);
+
+            // Draw Photo
+            ctx.drawImage(subjectImg, x, y, targetW, targetH);
+            
+            // Draw Cutting Border
+            ctx.strokeRect(x, y, targetW, targetH);
+        }
+
+        downloadLink.download = "passport-sheet-4x6.jpg";
     }
 
+    // Finalize
     downloadLink.href = canvas.toDataURL('image/jpeg', 1.0);
-    downloadLink.download = "passport-sheet.jpg";
     
     resultSection.classList.remove('hidden');
-    updateStatus("Success! Ready to print.", "bg-green-50 text-green-700 border-green-200");
+    updateStatus("Success!", "bg-green-50 text-green-700 border-green-200");
     processBtn.disabled = false;
+    
+    // Scroll to result
+    resultSection.scrollIntoView({ behavior: 'smooth' });
 }
 
 function updateStatus(msg, classes) {
