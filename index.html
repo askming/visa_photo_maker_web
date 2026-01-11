@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Passport Studio (U2Net)</title>
+    <title>Passport Studio (Tunable)</title>
     <link rel="shortcut icon" href="#">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -11,91 +11,358 @@
 
     <style>
         .img-container img { display: block; max-width: 100%; max-height: 500px; }
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1); width: 24px; height: 24px;
-            border-radius: 50%; border-left-color: #09f;
-            animation: spin 1s linear infinite;
+        /* Slider Styling */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
+            background: #2563eb; cursor: pointer; margin-top: -6px;
         }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: #e5e7eb; border-radius: 2px;
+        }
+        .spinner {
+            border: 3px solid rgba(0,0,0,0.1); width: 20px; height: 20px;
+            border-radius: 50%; border-left-color: #2563eb; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen py-10 px-4 font-sans">
 
-    <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <div class="bg-gray-900 p-6 text-center text-white">
-            <h1 class="text-2xl font-bold tracking-wide">PASSPORT STUDIO</h1>
-            <p class="text-gray-400 text-xs mt-1 uppercase tracking-widest">Powered by U2Net (Standard)</p>
-        </div>
-
-        <div class="p-8 space-y-8">
-            <div class="border-b pb-8">
-                <label class="block text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">1. Upload</label>
-                <input type="file" id="upload" accept="image/*" class="block w-full text-sm text-slate-500 file:mr-4 file:py-3 file:px-6 file:rounded-full file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer border rounded-xl p-2 transition-all">
+    <div class="max-w-6xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px]">
+        
+        <div class="w-full md:w-1/3 bg-gray-50 p-6 border-r border-gray-200 flex flex-col gap-6 overflow-y-auto">
+            <div class="border-b border-gray-200 pb-4">
+                <h1 class="text-xl font-bold text-gray-800">PASSPORT STUDIO</h1>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Tunable AI Engine</p>
             </div>
 
-            <div id="cropSection" class="hidden space-y-6 border-b pb-8">
-                <div class="flex flex-col md:flex-row justify-between items-end gap-4">
-                    <div class="flex-1 w-full">
-                        <label class="block text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">2. Crop</label>
-                    </div>
-                    <div class="w-full md:w-auto">
-                        <select id="countrySelect" class="w-full md:w-64 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm font-medium bg-white outline-none">
-                            <option value="1" data-w="600" data-h="600">🇺🇸 US / Generic (2x2")</option>
-                            <option value="0.77" data-w="413" data-h="531">🇪🇺 UK / EU (35x45 mm)</option>
-                            <option value="0.68" data-w="390" data-h="567">🇨🇳 China (33x48 mm)</option>
-                            <option value="0.7">🇨🇦 Canada (50x70 mm)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="relative rounded-xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 min-h-[400px] flex items-center justify-center">
-                    <div class="img-container w-full">
-                        <img id="previewImage" src="">
-                    </div>
-                </div>
+            <div>
+                <label class="text-xs font-bold text-gray-500 uppercase mb-2 block">1. Upload Source</label>
+                <input type="file" id="upload" accept="image/*" class="block w-full text-sm text-slate-500 file:mr-2 file:py-2 file:px-4 file:rounded-full file:bg-white file:border file:border-gray-300 file:text-gray-700 hover:file:bg-gray-100 cursor-pointer">
             </div>
 
-            <div id="optionsSection" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6 border-b pb-8">
-                <div>
-                    <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">Background</label>
-                    <input type="color" id="bgColor" value="#ffffff" class="w-full h-10 rounded border cursor-pointer">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">Mode</label>
-                    <select id="outputMode" class="w-full h-10 border rounded px-2 text-sm bg-white">
-                        <option value="sheet">Print Sheet (4x6)</option>
-                        <option value="single">Single File</option>
-                    </select>
-                </div>
-                <div id="qtyContainer">
-                    <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">Quantity</label>
-                    <input type="number" id="photoCount" value="6" min="1" max="8" class="w-full h-10 border rounded px-2 text-sm">
-                </div>
+            <div id="step2" class="opacity-50 pointer-events-none transition-opacity">
+                <label class="text-xs font-bold text-gray-500 uppercase mb-2 block">2. Standard</label>
+                <select id="countrySelect" class="w-full border border-gray-300 rounded px-2 py-2 text-sm bg-white">
+                    <option value="1" data-w="600" data-h="600">🇺🇸 US (2x2")</option>
+                    <option value="0.77" data-w="413" data-h="531">🇪🇺 UK/EU (35x45mm)</option>
+                    <option value="0.68" data-w="390" data-h="567">🇨🇳 China (33x48mm)</option>
+                    <option value="0.7" data-w="591" data-h="827">🇨🇦 Canada (50x70mm)</option>
+                </select>
             </div>
 
-            <div id="actionSection" class="hidden pt-2">
-                <button id="processBtn" class="group w-full bg-black hover:bg-gray-800 text-white font-bold py-4 rounded-xl transition-all shadow-lg flex justify-center items-center gap-3">
-                    <span class="text-lg">Process Photo</span>
+            <div id="tuningSection" class="hidden space-y-4 bg-white p-4 rounded-lg border border-blue-100 shadow-sm ring-1 ring-blue-500/20">
+                <div class="flex justify-between items-center">
+                    <label class="text-xs font-bold text-blue-700 uppercase">Mask Shrink (Fix Halo)</label>
+                    <span id="valShrink" class="text-xs font-mono text-gray-500">2.0</span>
+                </div>
+                <input type="range" id="rangeShrink" min="0" max="8" step="0.5" value="2.0">
+
+                <div class="flex justify-between items-center">
+                    <label class="text-xs font-bold text-blue-700 uppercase">Edge Softness</label>
+                    <span id="valSoft" class="text-xs font-mono text-gray-500">1.0</span>
+                </div>
+                <input type="range" id="rangeSoft" min="0" max="5" step="0.5" value="1.0">
+
+                <button id="reprocessBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded transition">
+                    Update Edges
                 </button>
             </div>
 
-            <div id="statusContainer" class="hidden p-6 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center gap-4">
+            <div id="step4" class="opacity-50 pointer-events-none transition-opacity">
+                <label class="text-xs font-bold text-gray-500 uppercase mb-2 block">4. Output Config</label>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <select id="outputMode" class="border border-gray-300 rounded px-2 py-2 text-sm bg-white">
+                        <option value="sheet">Sheet (4x6)</option>
+                        <option value="single">Single File</option>
+                    </select>
+                    <input type="color" id="bgColor" value="#ffffff" class="w-full h-full rounded border cursor-pointer h-[38px]">
+                </div>
+                <button id="processBtn" class="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-lg transition shadow-lg">
+                    Remove Background
+                </button>
+            </div>
+            
+            <div id="statusContainer" class="hidden flex items-center justify-center gap-2 text-xs font-bold text-blue-600 p-3 bg-blue-50 rounded">
                 <div class="spinner"></div>
-                <span id="statusText" class="text-blue-800 font-bold">Loading...</span>
+                <span id="statusText">Loading...</span>
+            </div>
+        </div>
+
+        <div class="w-full md:w-2/3 bg-gray-100 flex flex-col relative">
+            
+            <div id="welcomeState" class="absolute inset-0 flex items-center justify-center text-gray-400">
+                <p>Upload an image to start</p>
             </div>
 
-            <div id="resultSection" class="hidden space-y-6 pt-4">
-                <div class="p-4 bg-white border-2 border-gray-100 rounded-xl shadow-sm flex justify-center overflow-hidden">
-                    <canvas id="canvas" class="max-w-full h-auto shadow-md"></canvas>
+            <div id="cropArea" class="hidden flex-1 p-6 flex items-center justify-center">
+                <div class="max-w-full max-h-full shadow-2xl border-4 border-white">
+                    <img id="previewImage" src="">
                 </div>
-                <a id="downloadLink" class="block w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-center py-4 rounded-xl shadow-lg cursor-pointer">
-                    Download Result
-                </a>
             </div>
+
+            <div id="resultArea" class="hidden flex-1 p-6 flex flex-col items-center justify-center overflow-auto">
+                <canvas id="canvas" class="max-w-full h-auto shadow-lg border border-gray-200 bg-white"></canvas>
+                
+                <div class="mt-6 flex gap-4">
+                    <button id="editCropBtn" class="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-full text-sm transition">
+                        &larr; Recrop
+                    </button>
+                    <a id="downloadLink" class="px-8 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-full text-sm shadow-lg transition transform active:scale-95 cursor-pointer">
+                        Download
+                    </a>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
     
-    <script type="module" src="app.js"></script>
+    <script>
+        // DOM Elements
+        const uploadInput = document.getElementById('upload');
+        const step2 = document.getElementById('step2');
+        const step4 = document.getElementById('step4');
+        const welcomeState = document.getElementById('welcomeState');
+        const cropArea = document.getElementById('cropArea');
+        const resultArea = document.getElementById('resultArea');
+        const previewImage = document.getElementById('previewImage');
+        const countrySelect = document.getElementById('countrySelect');
+        const tuningSection = document.getElementById('tuningSection');
+        const outputMode = document.getElementById('outputMode');
+        const processBtn = document.getElementById('processBtn');
+        const reprocessBtn = document.getElementById('reprocessBtn');
+        const editCropBtn = document.getElementById('editCropBtn');
+        const statusContainer = document.getElementById('statusContainer');
+        const statusText = document.getElementById('statusText');
+        const canvas = document.getElementById('canvas');
+        const downloadLink = document.getElementById('downloadLink');
+
+        // Sliders
+        const rangeShrink = document.getElementById('rangeShrink');
+        const rangeSoft = document.getElementById('rangeSoft');
+        const valShrink = document.getElementById('valShrink');
+        const valSoft = document.getElementById('valSoft');
+
+        // State
+        let cropper = null;
+        let segmenter = null;
+        let lastAIResult = null; // Stores raw AI data for tuning
+
+        // --- 1. SETUP ENGINE ---
+        function initEngine() {
+            if (segmenter) return;
+            // Google MediaPipe Selfie Segmentation
+            segmenter = new SelfieSegmentation({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+            });
+            segmenter.setOptions({ modelSelection: 1 }); // 1 = High Quality
+            segmenter.onResults(onAIResults);
+        }
+
+        // --- 2. UPLOAD & CROP ---
+        uploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Reset UI
+            if (cropper) cropper.destroy();
+            welcomeState.classList.add('hidden');
+            cropArea.classList.remove('hidden');
+            resultArea.classList.add('hidden');
+            tuningSection.classList.add('hidden');
+            
+            // Activate Steps
+            step2.classList.remove('opacity-50', 'pointer-events-none');
+            step4.classList.remove('opacity-50', 'pointer-events-none');
+
+            previewImage.src = URL.createObjectURL(file);
+            previewImage.onload = () => {
+                const ratio = parseFloat(countrySelect.value);
+                cropper = new Cropper(previewImage, {
+                    aspectRatio: ratio,
+                    viewMode: 1,
+                    dragMode: 'move',
+                    autoCropArea: 0.85
+                });
+                initEngine();
+            };
+        });
+
+        countrySelect.addEventListener('change', () => {
+            if (cropper) cropper.setAspectRatio(parseFloat(countrySelect.value));
+        });
+
+        // --- 3. PROCESS ---
+        processBtn.addEventListener('click', async () => {
+            if (!cropper) return;
+            
+            processBtn.disabled = true;
+            processBtn.innerText = "Processing...";
+            updateStatus("AI is detecting edges...");
+
+            // Get Crop
+            const croppedCanvas = cropper.getCroppedCanvas({ width: 800, height: 800 });
+            
+            // Send to AI
+            await segmenter.send({ image: croppedCanvas });
+        });
+
+        // --- 4. RECEIVE AI RESULTS ---
+        function onAIResults(results) {
+            lastAIResult = results; // Save for tuning
+            
+            // UI Switch
+            cropArea.classList.add('hidden');
+            resultArea.classList.remove('hidden');
+            tuningSection.classList.remove('hidden');
+            processBtn.disabled = false;
+            processBtn.innerText = "Remove Background";
+            updateStatus("Done!", false);
+            statusContainer.classList.add('hidden');
+
+            // Run the rendering pipeline
+            renderOutput();
+        }
+
+        // --- 5. THE RENDERING PIPELINE (TUNABLE) ---
+        function renderOutput() {
+            if (!lastAIResult) return;
+
+            const shrink = parseFloat(rangeShrink.value);
+            const soft = parseFloat(rangeSoft.value);
+            
+            valShrink.innerText = shrink.toFixed(1);
+            valSoft.innerText = soft.toFixed(1);
+
+            const w = lastAIResult.image.width;
+            const h = lastAIResult.image.height;
+
+            // A. Prepare Mask
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = w; maskCanvas.height = h;
+            const maskCtx = maskCanvas.getContext('2d');
+            
+            // Draw original AI mask
+            maskCtx.drawImage(lastAIResult.segmentationMask, 0, 0, w, h);
+
+            // B. "Shrink" (Erosion) Logic
+            // We use pixel manipulation to shave off edges
+            const imageData = maskCtx.getImageData(0, 0, w, h);
+            const data = imageData.data;
+            
+            // To erode, we check neighbor transparency, but a simpler hack for web:
+            // Apply blur, then threshold HIGH. This pulls edges inward.
+            if (shrink > 0) {
+                maskCtx.filter = `blur(${shrink}px)`;
+                maskCtx.drawImage(maskCanvas, 0, 0, w, h); // Draw over itself to blur
+                maskCtx.filter = 'none';
+
+                // Now cut HARD
+                const blurData = maskCtx.getImageData(0, 0, w, h);
+                const px = blurData.data;
+                for (let i=0; i<px.length; i+=4) {
+                    // Only keep pixels that are VERY solid after blur
+                    if (px[i] < 200) px[i+3] = 0; // Cut
+                    else px[i+3] = 255; // Keep solid
+                }
+                maskCtx.putImageData(blurData, 0, 0);
+            }
+
+            // C. Feather (Softness)
+            // Now we blur the sharp edge slightly to make it look natural
+            if (soft > 0) {
+                // Create temp to hold hard shape
+                const hardCanvas = document.createElement('canvas');
+                hardCanvas.width = w; hardCanvas.height = h;
+                hardCanvas.getContext('2d').drawImage(maskCanvas, 0, 0);
+                
+                maskCtx.clearRect(0,0,w,h);
+                maskCtx.filter = `blur(${soft}px)`;
+                maskCtx.drawImage(hardCanvas, 0, 0);
+                maskCtx.filter = 'none';
+            }
+
+            // D. Composite
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = w; tempCanvas.height = h;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Draw final mask
+            tempCtx.drawImage(maskCanvas, 0, 0);
+            // Composite Source
+            tempCtx.globalCompositeOperation = 'source-in';
+            tempCtx.drawImage(lastAIResult.image, 0, 0);
+
+            // E. Generate Final Sheet/Single
+            const subjectImg = new Image();
+            subjectImg.onload = () => generateFinalLayout(subjectImg);
+            subjectImg.src = tempCanvas.toDataURL();
+        }
+
+        // --- 6. LAYOUT GENERATOR ---
+        function generateFinalLayout(subjectImg) {
+            const isSingle = outputMode.value === 'single';
+            const bg = document.getElementById('bgColor').value;
+            const option = countrySelect.options[countrySelect.selectedIndex];
+            const targetW = parseInt(option.dataset.w) || 600;
+            const targetH = parseInt(option.dataset.h) || 600;
+
+            if (isSingle) {
+                canvas.width = targetW; canvas.height = targetH;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(subjectImg, 0, 0, targetW, targetH);
+                downloadLink.download = "passport-single.png";
+            } else {
+                // Sheet 4x6
+                canvas.width = 1800; canvas.height = 1200;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const cols = Math.floor(canvas.width / targetW);
+                const rows = Math.floor(canvas.height / targetH);
+                const startX = (canvas.width - (cols * targetW)) / 2;
+                const startY = (canvas.height - (rows * targetH)) / 2;
+
+                ctx.strokeStyle = '#cccccc'; ctx.lineWidth = 2;
+
+                for (let r=0; r<rows; r++) {
+                    for (let c=0; c<cols; c++) {
+                        const x = startX + (c * targetW);
+                        const y = startY + (r * targetH);
+                        ctx.drawImage(subjectImg, x, y, targetW, targetH);
+                        ctx.strokeRect(x, y, targetW, targetH);
+                    }
+                }
+                downloadLink.download = "passport-sheet.jpg";
+            }
+            downloadLink.href = canvas.toDataURL('image/jpeg', 0.95);
+        }
+
+        // Listeners
+        reprocessBtn.addEventListener('click', renderOutput);
+        rangeShrink.addEventListener('input', renderOutput); // Live update
+        rangeSoft.addEventListener('input', renderOutput);  // Live update
+
+        editCropBtn.addEventListener('click', () => {
+            resultArea.classList.add('hidden');
+            tuningSection.classList.add('hidden');
+            cropArea.classList.remove('hidden');
+        });
+
+        function updateStatus(msg, showSpinner = true) {
+            statusContainer.classList.remove('hidden');
+            statusText.innerText = msg;
+            const spinner = statusContainer.querySelector('.spinner');
+            if(showSpinner) spinner.classList.remove('hidden');
+            else spinner.classList.add('hidden');
+        }
+    </script>
 </body>
 </html>
