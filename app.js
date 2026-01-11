@@ -1,9 +1,8 @@
-// 1. IMPORT TRANSFORMERS V3 (The Fix)
-// We use the official Hugging Face CDN. This version supports the new architecture.
-import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.2.4';
+// 1. IMPORT STABLE LIBRARY (v2.17.2)
+// This version guarantees support for RMBG-1.4
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
 // 2. CONFIGURATION
-// Skip local model checks to force fetching the correct files from the Hub
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
@@ -27,7 +26,7 @@ const downloadLink = document.getElementById('downloadLink');
 
 // State
 let cropper = null;
-let segmenter = null; // The AI Model
+let segmenter = null;
 
 // --- 1. HANDLE UPLOAD ---
 uploadInput.addEventListener('change', (e) => {
@@ -42,7 +41,6 @@ uploadInput.addEventListener('change', (e) => {
     optionsSection.classList.remove('hidden');
     actionSection.classList.remove('hidden');
     resultSection.classList.add('hidden');
-    
     statusContainer.classList.add('hidden');
 
     const url = URL.createObjectURL(file);
@@ -82,7 +80,7 @@ outputMode.addEventListener('change', () => {
     }
 });
 
-// --- 3. AI PROCESSING (RMBG-1.4) ---
+// --- 3. RUN AI (RMBG-1.4) ---
 processBtn.addEventListener('click', async () => {
     if (!cropper) return;
     processBtn.disabled = true;
@@ -90,30 +88,28 @@ processBtn.addEventListener('click', async () => {
     try {
         // A. Get High-Res Crop
         const croppedCanvas = cropper.getCroppedCanvas({
-            width: 1024, // High resolution for better AI accuracy
+            width: 1024,
             height: 1024,
             imageSmoothingQuality: 'high'
         });
         const cropUrl = croppedCanvas.toDataURL('image/png');
 
-        // B. Load Model (Lazy Load)
+        // B. Load Model
         if (!segmenter) {
-            updateStatus("Downloading RMBG-1.4 Model (70MB)... This happens once.", true);
-            
-            // This is the SOTA model for background removal
-            segmenter = await pipeline('image-segmentation', 'briaai/RMBG-1.4', {
-                device: 'webgpu', // Try GPU first, fallback to CPU automatically
-            });
+            updateStatus("Downloading AI Model (RMBG-1.4)... This happens once.", true);
+            // 'Xenova/birefnet' is also an option, but RMBG-1.4 is standard for v2.17.2
+            segmenter = await pipeline('image-segmentation', 'briaai/RMBG-1.4');
         }
 
         // C. Run Inference
-        updateStatus("AI is removing background...", true);
+        updateStatus("Processing (High Precision)...", true);
         const output = await segmenter(cropUrl);
 
-        // D. Composite Result
+        // D. Composite
         updateStatus("Generating Final Sheet...", true);
         
-        // The output is a list of masks. For this model, output[0] is the mask.
+        // In v2.17.2, the output is an array of masks.
+        // We need to convert the first mask to an ImageBitmap.
         const mask = output[0].mask; 
         await compositeImage(croppedCanvas, mask);
 
@@ -125,42 +121,51 @@ processBtn.addEventListener('click', async () => {
 });
 
 // --- 4. COMPOSITING ---
-async function compositeImage(originalCanvas, maskRawImage) {
-    // 1. Convert the AI mask (RawImage) to a Canvas
+async function compositeImage(originalCanvas, maskRaw) {
+    // Convert the mask (which comes as a RawImage in v2) to a canvas
     const maskCanvas = document.createElement('canvas');
-    maskCanvas.width = maskRawImage.width;
-    maskCanvas.height = maskRawImage.height;
+    maskCanvas.width = maskRaw.width;
+    maskCanvas.height = maskRaw.height;
     const maskCtx = maskCanvas.getContext('2d');
     
-    // Put mask data
-    const maskData = new ImageData(
-        new Uint8ClampedArray(maskRawImage.data),
-        maskRawImage.width,
-        maskRawImage.height
-    );
-    maskCtx.putImageData(maskData, 0, 0);
+    // Draw the mask data
+    // In v2.17.2, .mask might be a 'RawImage' object which has .toCanvas() method? 
+    // Or we might need to putImageData. Let's try the safest way.
+    
+    // Check if it has a .toCanvas() (common in Xenova utils)
+    let maskBitmap;
+    if (typeof maskRaw.toCanvas === 'function') {
+        const c = maskRaw.toCanvas();
+        maskBitmap = c;
+    } else {
+        // Fallback: Create from pixel data
+        const imageData = new ImageData(
+            new Uint8ClampedArray(maskRaw.data),
+            maskRaw.width,
+            maskRaw.height
+        );
+        maskCtx.putImageData(imageData, 0, 0);
+        maskBitmap = maskCanvas;
+    }
 
-    // 2. Create Composition Canvas
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = originalCanvas.width;
     tempCanvas.height = originalCanvas.height;
     const tempCtx = tempCanvas.getContext('2d');
 
-    // 3. Draw Mask (Grayscale)
-    // We scale the mask to match the original image size exactly
-    tempCtx.drawImage(maskCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+    // Draw Mask
+    tempCtx.drawImage(maskBitmap, 0, 0, tempCanvas.width, tempCanvas.height);
 
-    // 4. Source-In (Keep only what overlaps with the white parts of the mask)
+    // Source-In Composite
     tempCtx.globalCompositeOperation = 'source-in';
-    tempCtx.drawImage(originalCanvas, 0, 0);
+    tempCtx.drawImage(originalCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
 
-    // 5. Load result as Image for final tiling
     const subjectImg = new Image();
     subjectImg.onload = () => finalizeOutput(subjectImg);
     subjectImg.src = tempCanvas.toDataURL();
 }
 
-// --- 5. FINAL OUTPUT GENERATOR ---
+// --- 5. SHEET GENERATION ---
 function finalizeOutput(subjectImg) {
     const isSingle = outputMode.value === 'single';
     const bg = document.getElementById('bgColor').value;
@@ -176,7 +181,6 @@ function finalizeOutput(subjectImg) {
         ctx.drawImage(subjectImg, 0, 0, targetW, targetH);
         downloadLink.download = "passport-headshot.png";
     } else {
-        // 4x6 Sheet (1800x1200)
         canvas.width = 1800; 
         canvas.height = 1200;
         ctx.fillStyle = bg;
@@ -187,11 +191,10 @@ function finalizeOutput(subjectImg) {
         const rows = Math.floor(canvas.height / targetH);
         const limit = Math.min(reqCount, cols * rows);
 
-        // Centering
         const startX = (canvas.width - (cols * targetW)) / 2;
         const startY = (canvas.height - (rows * targetH)) / 2;
 
-        ctx.strokeStyle = '#e5e7eb'; // Light grey guide
+        ctx.strokeStyle = '#e5e7eb'; // Light grey
         ctx.lineWidth = 2;
 
         for (let i = 0; i < limit; i++) {
@@ -201,8 +204,6 @@ function finalizeOutput(subjectImg) {
             const y = startY + (r * targetH);
 
             ctx.drawImage(subjectImg, x, y, targetW, targetH);
-            
-            // Draw cutting guide ON TOP
             ctx.strokeRect(x, y, targetW, targetH);
         }
         downloadLink.download = "passport-sheet.jpg";
@@ -210,7 +211,6 @@ function finalizeOutput(subjectImg) {
 
     downloadLink.href = canvas.toDataURL('image/jpeg', 0.95);
     
-    // UI Cleanup
     statusContainer.classList.add('hidden');
     resultSection.classList.remove('hidden');
     processBtn.disabled = false;
