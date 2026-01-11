@@ -25,7 +25,7 @@ function initMediaPipe() {
     });
 
     selfieSegmentation.setOptions({
-        modelSelection: 1, // 1 = High Quality (slower but better edges)
+        modelSelection: 1, // 1 = High Quality
     });
 
     selfieSegmentation.onResults(onAIResults);
@@ -83,7 +83,7 @@ processBtn.addEventListener('click', async () => {
     if (!cropper || !selfieSegmentation) return;
 
     processBtn.disabled = true;
-    updateStatus("Processing (Applying Hard Cut Filter)...", "bg-blue-50 text-blue-700 border-blue-200");
+    updateStatus("Processing (Shrinking Edges to Remove Noise)...", "bg-blue-50 text-blue-700 border-blue-200");
 
     try {
         const croppedCanvas = cropper.getCroppedCanvas({
@@ -93,7 +93,6 @@ processBtn.addEventListener('click', async () => {
 
         if (!croppedCanvas) throw new Error("Could not crop image.");
 
-        // Send to MediaPipe
         await selfieSegmentation.send({image: croppedCanvas});
 
     } catch (error) {
@@ -103,43 +102,62 @@ processBtn.addEventListener('click', async () => {
     }
 });
 
-// --- 5. AI RESULT HANDLER (IMPROVED) ---
+// --- 5. AI RESULT HANDLER (The "Shrink & Soften" Fix) ---
 function onAIResults(results) {
-    updateStatus("Generating Sheet with Cutting Guides...", "bg-yellow-50 text-yellow-700 border-yellow-200");
+    updateStatus("Creating Sheet with Cutting Guides...", "bg-yellow-50 text-yellow-700 border-yellow-200");
 
-    // 1. Setup Temp Canvas
+    const width = results.image.width;
+    const height = results.image.height;
+
+    // 1. Prepare Layers
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+    const maskCtx = maskCanvas.getContext('2d');
+
+    // 2. SMART EROSION (The "Shrink" Step)
+    // First, draw the raw mask
+    maskCtx.drawImage(results.segmentationMask, 0, 0, width, height);
+    
+    // Apply a blur. This spreads the edge pixels out.
+    // By cutting ONLY the very high-confidence pixels later, we effectively 
+    // "shave off" the outer blurry layer, shrinking the mask.
+    maskCtx.filter = 'blur(4px)'; 
+    maskCtx.drawImage(maskCanvas, 0, 0);
+    maskCtx.filter = 'none'; // Reset
+
+    // 3. APPLY THRESHOLD & COMPOSITE
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = results.image.width;
-    tempCanvas.height = results.image.height;
+    tempCanvas.width = width;
+    tempCanvas.height = height;
     const tempCtx = tempCanvas.getContext('2d');
 
-    // 2. DRAW MASK
-    tempCtx.drawImage(results.segmentationMask, 0, 0, tempCanvas.width, tempCanvas.height);
+    // Draw the blurred mask
+    tempCtx.drawImage(maskCanvas, 0, 0);
 
-    // --- FIX: HARD CUT FILTER ---
-    // This removes the "fuzzy" residuals by forcing pixels to be either 100% visible or 100% transparent.
-    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    // Get pixel data to apply the "High Threshold"
+    const imageData = tempCtx.getImageData(0, 0, width, height);
     const data = imageData.data;
 
     for (let i = 0; i < data.length; i += 4) {
-        // data[i] is the Red channel (0-255). 
-        // If the confidence is high enough (>100), keep it. Otherwise, delete it.
-        const confidence = data[i]; 
-        if (confidence > 100) { 
-            data[i+3] = 255; // Fully Opaque (Keep)
+        const confidence = data[i]; // Red channel
+        
+        // AGGRESSIVE CUT: Only keep pixels that are extremely confident (>200/255).
+        // Because we blurred it first, this high threshold forces the edge 
+        // to retreat inward, removing the "halo" noise.
+        if (confidence > 200) { 
+            data[i+3] = 255; // Keep Opaque
         } else {
-            data[i+3] = 0;   // Fully Transparent (Delete)
+            data[i+3] = 0;   // Delete Transparent
         }
     }
-    // Put the "Cleaned" mask back
     tempCtx.putImageData(imageData, 0, 0);
 
-    // 3. COMPOSITE
-    // Now we draw the original person ON TOP of the cleaned mask
+    // 4. Draw the original person inside this "Shrunk" mask
     tempCtx.globalCompositeOperation = 'source-in';
-    tempCtx.drawImage(results.image, 0, 0, tempCanvas.width, tempCanvas.height);
+    tempCtx.drawImage(results.image, 0, 0);
 
-    // 4. GENERATE FINAL
+    // 5. Generate Final Sheet
     const subjectImg = new Image();
     subjectImg.onload = () => {
         generateSheet(subjectImg);
@@ -147,7 +165,7 @@ function onAIResults(results) {
     subjectImg.src = tempCanvas.toDataURL();
 }
 
-// --- 6. TILE GENERATOR (WITH GREY BORDERS) ---
+// --- 6. TILE GENERATOR (With Cutting Guides) ---
 function generateSheet(subjectImg) {
     canvas.width = 1800;
     canvas.height = 1200;
@@ -168,19 +186,17 @@ function generateSheet(subjectImg) {
     const ox = (size - dw) / 2;
     const oy = (size - dh) / 2;
 
-    // Setup Cutting Guide Style
-    ctx.strokeStyle = '#cccccc'; // Light Grey
-    ctx.lineWidth = 4;           // Thickness (4px on 300DPI is very thin)
-
     for (let i = 0; i < 6; i++) {
         const gx = (i % 3) * size;
         const gy = Math.floor(i / 3) * size;
 
-        // Draw Photo
+        // 1. Draw Photo
         ctx.drawImage(subjectImg, gx + ox, gy + oy, dw, dh);
         
-        // --- FIX: DRAW CUTTING BORDER ---
-        // Draw a rectangle around the photo slot
+        // 2. Draw Cutting Guide (Light Grey Border)
+        // We draw this AFTER the photo to ensure it sits on top
+        ctx.strokeStyle = '#d1d5db'; // Tailwind gray-300
+        ctx.lineWidth = 2;           // Thin line for cutting
         ctx.strokeRect(gx, gy, size, size);
     }
 
