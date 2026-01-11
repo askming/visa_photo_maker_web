@@ -76,16 +76,15 @@ processBtn.addEventListener('click', async () => {
         if (!croppedCanvas) throw new Error("Could not crop image.");
         const imageBlob = await new Promise(r => croppedCanvas.toBlob(r, 'image/jpeg', 0.95));
 
-        // B. CHECK LIBRARY
-        // We check if the global 'imgly' object exists
-        if (typeof imgly === 'undefined') {
-            throw new Error("AI Library failed to load. Please refresh the page.");
+        // B. CHECK LIBRARY (v1.3.0 uses global 'imglyRemoveBackground')
+        if (typeof imglyRemoveBackground !== 'function') {
+            throw new Error("AI Library failed to load. Please refresh.");
         }
 
-        // C. CONFIGURATION (The Fix for 404s)
+        // C. CONFIGURATION (For v1.3.0)
         // We point to UNPKG for the model files
         const config = {
-            publicPath: "https://unpkg.com/@imgly/background-removal-data@1.5.5/dist/",
+            publicPath: "https://unpkg.com/@imgly/background-removal-data@1.3.0/dist/",
             progress: (key, current, total) => {
                 const percent = Math.round((current / total) * 100);
                 if (percent) updateStatus(`AI Processing: ${percent}%`, "bg-yellow-50 text-yellow-700 border-yellow-200");
@@ -94,7 +93,7 @@ processBtn.addEventListener('click', async () => {
 
         // D. EXECUTE (Global Function)
         updateStatus("Downloading AI Model...", "bg-yellow-50 text-yellow-700 border-yellow-200");
-        const removedBgBlob = await imgly.removeBackground(imageBlob, config);
+        const removedBgBlob = await imglyRemoveBackground(imageBlob, config);
         const subjectImg = await loadImage(URL.createObjectURL(removedBgBlob));
 
         // E. GENERATE SHEET
