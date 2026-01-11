@@ -64,39 +64,34 @@ processBtn.addEventListener('click', async () => {
     if (!cropper) return;
 
     processBtn.disabled = true;
-    updateStatus("Processing...", "bg-blue-50 text-blue-700 border-blue-200");
+    updateStatus("Initializing...", "bg-blue-50 text-blue-700 border-blue-200");
 
     try {
-        // A. Get the cropped image
         const croppedCanvas = cropper.getCroppedCanvas({
             width: 1000,
             height: 1000,
         });
-
         if (!croppedCanvas) throw new Error("Could not crop image.");
         const imageBlob = await new Promise(r => croppedCanvas.toBlob(r, 'image/jpeg', 0.95));
 
-        // B. CHECK LIBRARY (v1.3.0 uses global 'imglyRemoveBackground')
-        if (typeof imglyRemoveBackground !== 'function') {
-            throw new Error("AI Library failed to load. Please refresh.");
-        }
+        // --- THE FIX: USE ESM.SH ---
+        updateStatus("Downloading Library...", "bg-yellow-50 text-yellow-700 border-yellow-200");
+        
+        // This CDN fixes the 'lodash' and 'memoize' errors automatically
+        const { removeBackground } = await import("https://esm.sh/@imgly/background-removal@1.5.5");
 
-        // C. CONFIGURATION (For v1.3.0)
-        // We point to UNPKG for the model files
+        // We still point to UNPKG for the WASM data because it's reliable
         const config = {
-            publicPath: "https://unpkg.com/@imgly/background-removal-data@1.3.0/dist/",
+            publicPath: "https://unpkg.com/@imgly/background-removal-data@1.5.5/dist/",
             progress: (key, current, total) => {
                 const percent = Math.round((current / total) * 100);
                 if (percent) updateStatus(`AI Processing: ${percent}%`, "bg-yellow-50 text-yellow-700 border-yellow-200");
             }
         };
 
-        // D. EXECUTE (Global Function)
-        updateStatus("Downloading AI Model...", "bg-yellow-50 text-yellow-700 border-yellow-200");
-        const removedBgBlob = await imglyRemoveBackground(imageBlob, config);
+        const removedBgBlob = await removeBackground(imageBlob, config);
         const subjectImg = await loadImage(URL.createObjectURL(removedBgBlob));
 
-        // E. GENERATE SHEET
         updateStatus("Generating Sheet...", "bg-blue-50 text-blue-700 border-blue-200");
         generateSheet(subjectImg);
 
