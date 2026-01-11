@@ -18,7 +18,6 @@ uploadInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Reset previous state
     if (cropper) {
         cropper.destroy();
         cropper = null;
@@ -27,32 +26,31 @@ uploadInput.addEventListener('change', (e) => {
     resultSection.classList.add('hidden');
     updateStatus('', 'hidden');
 
-    // Load image
     const url = URL.createObjectURL(file);
     previewImage.src = url;
 
-    // Wait for image load to init Cropper
+    // Wait for image to load to avoid race conditions
     previewImage.onload = () => {
         initCropper();
     };
 });
 
-// Initialize Cropper instance
 function initCropper() {
     const aspectRatio = parseFloat(countrySelect.value);
     
     cropper = new Cropper(previewImage, {
         aspectRatio: aspectRatio,
-        viewMode: 1,      // Restrict crop box to image bounds
-        dragMode: 'move', // Allow moving the image
-        autoCropArea: 0.8,
-        restore: false,
+        viewMode: 1, // Restrict crop box to image size
+        dragMode: 'move',
+        autoCropArea: 0.85,
         guides: true,
         center: true,
         highlight: false,
+        background: false,
+        zoomable: false, // Simplifies UX
+        movable: false,  // Keeps image static, moves crop box instead
         cropBoxMovable: true,
         cropBoxResizable: true,
-        toggleDragModeOnDblclick: false,
     });
     
     processBtn.disabled = false;
@@ -69,95 +67,87 @@ countrySelect.addEventListener('change', () => {
 processBtn.addEventListener('click', async () => {
     if (!cropper) return;
 
-    // UI Updates
     processBtn.disabled = true;
-    updateStatus("Step 1/3: Downloading AI Brain (Wait ~30s)...", "bg-yellow-100 text-yellow-800");
+    updateStatus("Connecting to AI Library...", "bg-blue-50 text-blue-700 border-blue-200");
 
     try {
-        // A. Get the cropped image from Cropper.js
+        // A. Get the cropped image
         const croppedCanvas = cropper.getCroppedCanvas({
-            width: 1000, // High resolution for quality
+            width: 1000,
             height: 1000,
             imageSmoothingEnabled: true,
             imageSmoothingQuality: 'high',
         });
 
-        if (!croppedCanvas) throw new Error("Could not crop image. Please try again.");
+        if (!croppedCanvas) throw new Error("Could not crop image.");
+        const imageBlob = await new Promise(r => croppedCanvas.toBlob(r, 'image/jpeg', 0.95));
 
-        // B. Convert Canvas to Blob for the AI
-        const imageBlob = await new Promise(resolve => croppedCanvas.toBlob(resolve, 'image/jpeg', 0.95));
-
-        // C. Check if Library is Loaded
-        // The script in index.html creates 'window.imgly'
-        if (typeof imgly === 'undefined') {
-            throw new Error("AI Library failed to load. Check your internet connection.");
+        // B. DYNAMIC IMPORT (The Fix)
+        // We import the ESM bundle. This works in your screenshots (Status 200).
+        updateStatus("Downloading AI Code...", "bg-yellow-50 text-yellow-700 border-yellow-200");
+        
+        const module = await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/+esm");
+        
+        // UNIVERSAL FUNCTION FINDER
+        // Handles both 'export default' and 'export named' scenarios
+        const removeBackground = module.default || module.removeBackground || module;
+        
+        if (typeof removeBackground !== 'function') {
+            throw new Error("Library loaded but function not found. Please reload.");
         }
 
-        // D. Configure AI (Point to UNPKG for data)
-        // This fixes the "Resource Not Found" error
+        // C. CONFIGURATION (The Data Fix)
+        // We point to UNPKG for the .wasm files to avoid 404s
         const config = {
-            publicPath: "https://unpkg.com/@imgly/background-removal-data@1.5.5/dist/",
+            publicPath: "https://unpkg.com/@imgly/background-removal-data@1.4.5/dist/",
             progress: (key, current, total) => {
                 const percent = Math.round((current / total) * 100);
-                if (percent) updateStatus(`Downloading AI Model: ${percent}%`, "bg-yellow-100 text-yellow-800");
+                if (percent) updateStatus(`AI Processing: ${percent}%`, "bg-yellow-50 text-yellow-700 border-yellow-200");
             }
         };
 
-        // E. Run Background Removal
-        updateStatus("Step 2/3: Removing Background...", "bg-blue-100 text-blue-800");
-        const removedBgBlob = await imgly.removeBackground(imageBlob, config);
+        // D. EXECUTE
+        const removedBgBlob = await removeBackground(imageBlob, config);
         const subjectImg = await loadImage(URL.createObjectURL(removedBgBlob));
 
-        // F. Generate Sheet
-        updateStatus("Step 3/3: Generating 4x6 Sheet...", "bg-blue-100 text-blue-800");
+        // E. GENERATE SHEET
+        updateStatus("Creating 4x6 Sheet...", "bg-blue-50 text-blue-700 border-blue-200");
         generateSheet(subjectImg);
 
     } catch (error) {
         console.error(error);
-        updateStatus(`Error: ${error.message}`, "bg-red-100 text-red-800");
+        updateStatus(`Error: ${error.message}`, "bg-red-50 text-red-700 border-red-200");
         processBtn.disabled = false;
     }
 });
 
-// --- 4. GENERATE 4x6 SHEET ---
+// --- 4. TILE GENERATOR ---
 function generateSheet(subjectImg) {
-    // 4x6 inches @ 300 DPI = 1200x1800 px
-    // (We use 1800x1200 for landscape 6x4 paper)
+    // 4x6 inches @ 300 DPI = 1200x1800 px (Landscape 6x4 paper: 1800x1200)
     canvas.width = 1800;
     canvas.height = 1200;
 
-    // Fill Background
+    // Background
     ctx.fillStyle = document.getElementById('bgColor').value;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Tile 6 Photos
-    // Target size for each photo on the sheet (2 inches = 600px)
-    const size = 600; 
+    // Tiling Logic
+    const size = 600; // 2 inches @ 300 DPI
     
-    // We need to fit the cropped image (which might be rectangular) into the 600x600 slot
-    // keeping aspect ratio correct.
-    const aspectRatio = subjectImg.width / subjectImg.height;
-    let drawWidth, drawHeight;
+    // Fit logic: contain the image within the square
+    const ratio = subjectImg.width / subjectImg.height;
+    let dw, dh;
+    
+    if (ratio > 1) { dw = size; dh = size / ratio; }
+    else { dh = size; dw = size * ratio; }
 
-    if (aspectRatio > 1) {
-        // Wider than tall
-        drawWidth = size;
-        drawHeight = size / aspectRatio;
-    } else {
-        // Taller than wide (Standard passport)
-        drawHeight = size;
-        drawWidth = size * aspectRatio;
-    }
-    
-    // Centering offsets
-    const offsetX = (size - drawWidth) / 2;
-    const offsetY = (size - drawHeight) / 2;
+    const ox = (size - dw) / 2;
+    const oy = (size - dh) / 2;
 
     for (let i = 0; i < 6; i++) {
-        const gridX = (i % 3) * size; // Column position
-        const gridY = Math.floor(i / 3) * size; // Row position
-        
-        ctx.drawImage(subjectImg, gridX + offsetX, gridY + offsetY, drawWidth, drawHeight);
+        const gx = (i % 3) * size;
+        const gy = Math.floor(i / 3) * size;
+        ctx.drawImage(subjectImg, gx + ox, gy + oy, dw, dh);
     }
 
     // Finish
@@ -165,13 +155,12 @@ function generateSheet(subjectImg) {
     downloadLink.download = "passport-sheet.jpg";
     
     resultSection.classList.remove('hidden');
-    updateStatus("Success! Download your sheet below.", "bg-green-100 text-green-800");
+    updateStatus("Success! Your sheet is ready.", "bg-green-50 text-green-700 border-green-200");
     processBtn.disabled = false;
 }
 
-// Helpers
 function updateStatus(msg, classes) {
-    statusContainer.className = `p-4 rounded-lg text-center text-sm font-bold ${classes}`;
+    statusContainer.className = `p-4 rounded-lg text-center text-sm font-bold border ${classes}`;
     statusContainer.innerText = msg;
     statusContainer.classList.toggle('hidden', !msg);
 }
