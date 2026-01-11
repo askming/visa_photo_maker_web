@@ -1,3 +1,10 @@
+// Import Transformers.js from CDN
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js';
+
+// Configuration: Stop it from looking for local files
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+
 // DOM Elements
 const uploadInput = document.getElementById('upload');
 const cropSection = document.getElementById('cropSection');
@@ -15,24 +22,11 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const downloadLink = document.getElementById('downloadLink');
 
-// Global Variables
+// State
 let cropper = null;
-let selfieSegmentation = null;
+let matteModel = null; // This will hold our AI
 
-// --- 1. SETUP GOOGLE AI ---
-function initMediaPipe() {
-    if (selfieSegmentation) return;
-
-    selfieSegmentation = new SelfieSegmentation({
-        locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
-        }
-    });
-    selfieSegmentation.setOptions({ modelSelection: 1 }); // High Quality
-    selfieSegmentation.onResults(onAIResults);
-}
-
-// --- 2. HANDLE UPLOAD ---
+// --- 1. HANDLE UPLOAD ---
 uploadInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -69,16 +63,11 @@ function initCropper() {
         cropBoxMovable: true,
         cropBoxResizable: true,
     });
-    
-    initMediaPipe();
-    processBtn.disabled = false;
 }
 
-// --- 3. UI HANDLERS ---
+// --- 2. UI HANDLERS ---
 countrySelect.addEventListener('change', () => {
-    if (cropper) {
-        cropper.setAspectRatio(parseFloat(countrySelect.value));
-    }
+    if (cropper) cropper.setAspectRatio(parseFloat(countrySelect.value));
 });
 
 outputMode.addEventListener('change', () => {
@@ -89,134 +78,132 @@ outputMode.addEventListener('change', () => {
     }
 });
 
-// --- 4. PROCESS BUTTON ---
+// --- 3. THE AI PROCESS ---
 processBtn.addEventListener('click', async () => {
-    if (!cropper || !selfieSegmentation) return;
-
+    if (!cropper) return;
+    
     processBtn.disabled = true;
-    updateStatus("Processing (Smooth Mode)...", "bg-blue-50 text-blue-700 border-blue-200");
 
     try {
-        // Get crop (High Quality)
+        // 1. Get Crop
         const croppedCanvas = cropper.getCroppedCanvas({
-            width: 800, 
-            height: 800,
+            width: 1024, // ModNet likes higher res
+            height: 1024,
             imageSmoothingQuality: 'high'
         });
-
         if (!croppedCanvas) throw new Error("Could not crop image.");
-        await selfieSegmentation.send({image: croppedCanvas});
+        
+        const imageUrl = croppedCanvas.toDataURL('image/png');
+
+        // 2. Load AI (Lazy Load)
+        if (!matteModel) {
+            updateStatus("Downloading HD AI Model (40MB)... This happens once.", "bg-blue-100 text-blue-800 border-blue-200");
+            
+            // We use 'image-segmentation' pipeline with ModNet
+            matteModel = await pipeline('image-segmentation', 'Xenova/modnet');
+        }
+
+        updateStatus("AI is analyzing hair & edges...", "bg-purple-100 text-purple-800 border-purple-200");
+
+        // 3. Run Inference
+        const result = await matteModel(imageUrl);
+        
+        // ModNet returns a mask (alpha matte)
+        // We need to composite it.
+        await processOutput(result, croppedCanvas);
 
     } catch (error) {
         console.error(error);
-        updateStatus(`Error: ${error.message}`, "bg-red-50 text-red-700 border-red-200");
+        updateStatus(`Error: ${error.message}`, "bg-red-100 text-red-800 border-red-200");
         processBtn.disabled = false;
     }
 });
 
-// --- 5. AI RESULT HANDLER (Restored Smoothness) ---
-function onAIResults(results) {
-    updateStatus("Generating Final Output...", "bg-yellow-50 text-yellow-700 border-yellow-200");
+// --- 4. COMPOSITING ---
+async function processOutput(prediction, originalCanvas) {
+    updateStatus("Generating Final Image...", "bg-yellow-100 text-yellow-800 border-yellow-200");
 
-    // 1. Setup Temp Canvas
+    // The prediction is a mask. We need to create a canvas from it.
+    // Transformers.js returns a mask object that has a .toCanvas() method? 
+    // Usually it returns a RawImage or similar.
+    
+    // For 'image-segmentation' pipeline, the output is usually [{ mask: Jimp/RawImage, label: ... }]
+    // Or just the mask if it's ModNet.
+    
+    // Let's handle the mask data safely
+    const mask = prediction[0].mask; // It returns an array of results
+    
+    // Convert mask to bitmap
+    const maskBitmap = await createImageBitmap(mask);
+
+    // Create a temp canvas to combine Image + Mask
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = results.image.width;
-    tempCanvas.height = results.image.height;
+    tempCanvas.width = originalCanvas.width;
+    tempCanvas.height = originalCanvas.height;
     const tempCtx = tempCanvas.getContext('2d');
 
-    // 2. Draw Mask
-    // We removed the "Erosion/Threshold" loop here. 
-    // This goes back to the standard smooth mask you liked.
-    tempCtx.drawImage(results.segmentationMask, 0, 0, tempCanvas.width, tempCanvas.height);
+    // Draw Mask
+    tempCtx.drawImage(maskBitmap, 0, 0, tempCanvas.width, tempCanvas.height);
 
-    // 3. Composite Person
+    // Composite Source (Keep only the white parts of mask)
     tempCtx.globalCompositeOperation = 'source-in';
-    tempCtx.drawImage(results.image, 0, 0, tempCanvas.width, tempCanvas.height);
+    tempCtx.drawImage(originalCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
 
-    // 4. Generate Final Result
+    // Generate Final
     const subjectImg = new Image();
-    subjectImg.onload = () => {
-        finalizeOutput(subjectImg);
-    };
+    subjectImg.onload = () => finalizeOutput(subjectImg);
     subjectImg.src = tempCanvas.toDataURL();
 }
 
-// --- 6. FINAL GENERATION (Single or Sheet) ---
+// --- 5. SHEET GENERATION ---
 function finalizeOutput(subjectImg) {
     const isSingle = outputMode.value === 'single';
     const bg = document.getElementById('bgColor').value;
-    
-    // Get target dimensions from the select dropdown data attributes
     const option = countrySelect.options[countrySelect.selectedIndex];
-    // Dimensions in pixels @ 300 DPI
     const targetW = parseInt(option.dataset.w) || 600;
     const targetH = parseInt(option.dataset.h) || 600;
 
     if (isSingle) {
-        // --- SINGLE HEADSHOT MODE ---
         canvas.width = targetW;
         canvas.height = targetH;
-        
         ctx.fillStyle = bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(subjectImg, 0, 0, targetW, targetH);
-        
         downloadLink.download = "passport-headshot.jpg";
-    } 
-    else {
-        // --- 4x6 SHEET MODE ---
-        // 4x6 inches @ 300 DPI = 1200x1800 (Landscape)
+    } else {
+        // 4x6 inch @ 300 DPI
         canvas.width = 1800; 
         canvas.height = 1200;
-
         ctx.fillStyle = bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Tiling Logic
         const reqCount = parseInt(photoCount.value) || 6;
-        
-        // Calculate max columns/rows
         const cols = Math.floor(canvas.width / targetW);
         const rows = Math.floor(canvas.height / targetH);
-        const maxFit = cols * rows;
-        
-        // Use user count, but don't exceed what physically fits
-        const limit = Math.min(reqCount, maxFit);
+        const limit = Math.min(reqCount, cols * rows);
 
-        // Calculate centering offsets (margin)
-        const totalW = cols * targetW;
-        const totalH = rows * targetH;
-        const marginX = (canvas.width - totalW) / 2;
-        const marginY = (canvas.height - totalH) / 2;
+        const startX = (canvas.width - (cols * targetW)) / 2;
+        const startY = (canvas.height - (rows * targetH)) / 2;
 
-        ctx.strokeStyle = '#cccccc'; // Grey cutting guide
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth = 4;
 
         for (let i = 0; i < limit; i++) {
             const c = i % cols;
             const r = Math.floor(i / cols);
-            
-            const x = marginX + (c * targetW);
-            const y = marginY + (r * targetH);
+            const x = startX + (c * targetW);
+            const y = startY + (r * targetH);
 
-            // Draw Photo
             ctx.drawImage(subjectImg, x, y, targetW, targetH);
-            
-            // Draw Cutting Border
             ctx.strokeRect(x, y, targetW, targetH);
         }
-
         downloadLink.download = "passport-sheet-4x6.jpg";
     }
 
-    // Finalize
     downloadLink.href = canvas.toDataURL('image/jpeg', 1.0);
-    
     resultSection.classList.remove('hidden');
-    updateStatus("Success!", "bg-green-50 text-green-700 border-green-200");
+    updateStatus("Success! High-Quality Render Complete.", "bg-green-100 text-green-800 border-green-200");
     processBtn.disabled = false;
-    
-    // Scroll to result
     resultSection.scrollIntoView({ behavior: 'smooth' });
 }
 
