@@ -74,15 +74,16 @@ processBtn.addEventListener('click', async () => {
         if (!croppedCanvas) throw new Error("Could not crop image.");
         const imageBlob = await new Promise(r => croppedCanvas.toBlob(r, 'image/jpeg', 0.95));
 
-        // --- THE FIX: USE ESM.SH ---
+        // --- THE FIX: ESM.SH ---
         updateStatus("Downloading Library...", "bg-yellow-50 text-yellow-700 border-yellow-200");
         
-        // This CDN fixes the 'lodash' and 'memoize' errors automatically
+        // This specific URL bundles 'lodash' so the SyntaxError goes away
         const { removeBackground } = await import("https://esm.sh/@imgly/background-removal@1.5.5");
 
-        // We still point to UNPKG for the WASM data because it's reliable
+        // --- THE FIX: JSDELIVR ---
+        // We switched from UNPKG to JSDelivr to fix the CORS/404 errors for the models
         const config = {
-            publicPath: "https://unpkg.com/@imgly/background-removal-data@1.5.5/dist/",
+            publicPath: "https://cdn.jsdelivr.net/npm/@imgly/background-removal-data@1.5.5/dist/",
             progress: (key, current, total) => {
                 const percent = Math.round((current / total) * 100);
                 if (percent) updateStatus(`AI Processing: ${percent}%`, "bg-yellow-50 text-yellow-700 border-yellow-200");
