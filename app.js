@@ -1,10 +1,3 @@
-// Import Transformers.js from CDN
-import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js';
-
-// Configuration: Stop it from looking for local files
-env.allowLocalModels = false;
-env.useBrowserCache = true;
-
 // DOM Elements
 const uploadInput = document.getElementById('upload');
 const cropSection = document.getElementById('cropSection');
@@ -24,7 +17,6 @@ const downloadLink = document.getElementById('downloadLink');
 
 // State
 let cropper = null;
-let matteModel = null; // This will hold our AI
 
 // --- 1. HANDLE UPLOAD ---
 uploadInput.addEventListener('change', (e) => {
@@ -78,39 +70,45 @@ outputMode.addEventListener('change', () => {
     }
 });
 
-// --- 3. THE AI PROCESS ---
+// --- 3. THE PROCESS ---
 processBtn.addEventListener('click', async () => {
     if (!cropper) return;
-    
     processBtn.disabled = true;
 
     try {
-        // 1. Get Crop
+        // A. Get Crop
         const croppedCanvas = cropper.getCroppedCanvas({
-            width: 1024, // ModNet likes higher res
-            height: 1024,
-            imageSmoothingQuality: 'high'
+            width: 1000,
+            height: 1000,
         });
         if (!croppedCanvas) throw new Error("Could not crop image.");
         
-        const imageUrl = croppedCanvas.toDataURL('image/png');
+        // Convert to Blob for the AI
+        const imageBlob = await new Promise(r => croppedCanvas.toBlob(r, 'image/jpeg', 0.95));
 
-        // 2. Load AI (Lazy Load)
-        if (!matteModel) {
-            updateStatus("Downloading HD AI Model (40MB)... This happens once.", "bg-blue-100 text-blue-800 border-blue-200");
-            
-            // We use 'image-segmentation' pipeline with ModNet
-            matteModel = await pipeline('image-segmentation', 'Xenova/modnet');
+        // B. CHECK LIBRARY
+        if (typeof imglyRemoveBackground !== 'function') {
+            throw new Error("Library failed to load. Please hard-refresh the page.");
         }
 
-        updateStatus("AI is analyzing hair & edges...", "bg-purple-100 text-purple-800 border-purple-200");
+        // C. RUN AI (v1.2.1 Config)
+        updateStatus("Downloading AI Model (Wait ~30s)...", "bg-blue-100 text-blue-800 border-blue-200");
 
-        // 3. Run Inference
-        const result = await matteModel(imageUrl);
-        
-        // ModNet returns a mask (alpha matte)
-        // We need to composite it.
-        await processOutput(result, croppedCanvas);
+        // We point explicitly to version 1.2.1 on UNPKG for the data files
+        const config = {
+            publicPath: "https://unpkg.com/@imgly/background-removal@1.2.1/dist/",
+            progress: (key, current, total) => {
+                const percent = Math.round((current / total) * 100);
+                if (percent) updateStatus(`AI Processing: ${percent}%`, "bg-purple-100 text-purple-800 border-purple-200");
+            }
+        };
+
+        const resultBlob = await imglyRemoveBackground(imageBlob, config);
+        const subjectImg = await loadImage(URL.createObjectURL(resultBlob));
+
+        // D. FINALIZE
+        updateStatus("Generating Final Output...", "bg-yellow-100 text-yellow-800 border-yellow-200");
+        finalizeOutput(subjectImg);
 
     } catch (error) {
         console.error(error);
@@ -119,43 +117,7 @@ processBtn.addEventListener('click', async () => {
     }
 });
 
-// --- 4. COMPOSITING ---
-async function processOutput(prediction, originalCanvas) {
-    updateStatus("Generating Final Image...", "bg-yellow-100 text-yellow-800 border-yellow-200");
-
-    // The prediction is a mask. We need to create a canvas from it.
-    // Transformers.js returns a mask object that has a .toCanvas() method? 
-    // Usually it returns a RawImage or similar.
-    
-    // For 'image-segmentation' pipeline, the output is usually [{ mask: Jimp/RawImage, label: ... }]
-    // Or just the mask if it's ModNet.
-    
-    // Let's handle the mask data safely
-    const mask = prediction[0].mask; // It returns an array of results
-    
-    // Convert mask to bitmap
-    const maskBitmap = await createImageBitmap(mask);
-
-    // Create a temp canvas to combine Image + Mask
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = originalCanvas.width;
-    tempCanvas.height = originalCanvas.height;
-    const tempCtx = tempCanvas.getContext('2d');
-
-    // Draw Mask
-    tempCtx.drawImage(maskBitmap, 0, 0, tempCanvas.width, tempCanvas.height);
-
-    // Composite Source (Keep only the white parts of mask)
-    tempCtx.globalCompositeOperation = 'source-in';
-    tempCtx.drawImage(originalCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
-
-    // Generate Final
-    const subjectImg = new Image();
-    subjectImg.onload = () => finalizeOutput(subjectImg);
-    subjectImg.src = tempCanvas.toDataURL();
-}
-
-// --- 5. SHEET GENERATION ---
+// --- 4. SHEET GENERATION ---
 function finalizeOutput(subjectImg) {
     const isSingle = outputMode.value === 'single';
     const bg = document.getElementById('bgColor').value;
@@ -202,7 +164,7 @@ function finalizeOutput(subjectImg) {
 
     downloadLink.href = canvas.toDataURL('image/jpeg', 1.0);
     resultSection.classList.remove('hidden');
-    updateStatus("Success! High-Quality Render Complete.", "bg-green-100 text-green-800 border-green-200");
+    updateStatus("Success! Pro-Quality Render Complete.", "bg-green-100 text-green-800 border-green-200");
     processBtn.disabled = false;
     resultSection.scrollIntoView({ behavior: 'smooth' });
 }
@@ -211,4 +173,8 @@ function updateStatus(msg, classes) {
     statusContainer.className = `p-4 rounded-lg text-center text-sm font-bold border ${classes}`;
     statusContainer.innerText = msg;
     statusContainer.classList.toggle('hidden', !msg);
+}
+
+function loadImage(url) {
+    return new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = url; });
 }

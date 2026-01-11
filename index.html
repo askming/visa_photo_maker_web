@@ -22,7 +22,7 @@
     <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
         <div class="bg-gray-900 p-6 text-center text-white">
             <h1 class="text-2xl font-bold">Pro Passport Studio</h1>
-            <p class="text-gray-400 text-sm mt-1">Powered by ModNet (Professional Matting)</p>
+            <p class="text-gray-400 text-sm mt-1">High-Precision AI (v1.2.1 Stable)</p>
         </div>
 
         <div class="p-6 space-y-8">
@@ -51,7 +51,7 @@
                         <img id="previewImage" src="" alt="Upload preview">
                     </div>
                 </div>
-                <p class="text-xs text-center text-gray-500">Drag box to frame head. Use a high-quality photo.</p>
+                <p class="text-xs text-center text-gray-500">Drag box to frame head.</p>
             </div>
 
             <div id="optionsSection" class="hidden border-t pt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -97,6 +97,8 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 
-    <script type="module" src="app.js"></script>
+    <script src="https://unpkg.com/@imgly/background-removal@1.2.1/dist/imgly-background-removal.js"></script>
+
+    <script src="app.js"></script>
 </body>
 </html>
