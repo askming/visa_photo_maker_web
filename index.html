@@ -5,48 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Passport Photo Studio</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 
+    <script src="https://unpkg.com/@imgly/background-removal@1.5.5/dist/browser/index.min.js"></script>
+
     <style>
-        /* Ensure image fits container for Cropper */
-        #image-container img {
-            max-width: 100%;
+        /* REQUIRED FOR CROPPER JS */
+        /* If this is missing, the crop box won't work */
+        .img-container img {
             display: block;
+            max-width: 100%;
+            max-height: 500px; /* Limits height so it fits on screen */
         }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen py-8 px-4">
 
     <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-        <div class="bg-blue-600 p-4 text-center text-white">
+        <div class="bg-indigo-600 p-4 text-center text-white">
             <h1 class="text-xl font-bold">Passport Photo Studio</h1>
-            <p class="text-sm opacity-90">Crop first, then process locally.</p>
+            <p class="text-sm opacity-90">Secure & Private</p>
         </div>
 
         <div class="p-6 space-y-6">
             <div>
-                <label class="block text-sm font-bold text-gray-700 mb-2">1. Upload & Crop Photo</label>
-                <input type="file" id="upload" accept="image/*" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 mb-4 cursor-pointer">
+                <label class="block text-sm font-bold text-gray-700 mb-2">1. Upload & Crop</label>
+                <input type="file" id="upload" accept="image/*" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 mb-4 cursor-pointer">
                 
-                <div id="image-container" class="hidden rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 min-h-[300px] flex items-center justify-center">
-                    <img id="preview-image" src="" alt="Upload preview">
+                <div id="wrapper" class="hidden border-2 border-dashed border-gray-300 bg-gray-50 rounded-lg flex items-center justify-center min-h-[300px] p-1">
+                    <div class="img-container">
+                        <img id="preview-image" src="" alt="Upload preview">
+                    </div>
                 </div>
                 <p id="placeholder-text" class="text-center text-gray-500 py-10 border-2 border-dashed border-gray-300 rounded-lg">No image selected</p>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">2. Background Color</label>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">2. Background</label>
                     <div class="flex items-center border rounded-lg p-2 bg-gray-50">
                         <input type="color" id="bgColor" value="#ffffff" class="h-8 w-12 cursor-pointer border rounded">
-                        <span class="ml-3 text-sm text-gray-600">Select color</span>
+                        <span class="ml-3 text-sm text-gray-600">Select Color</span>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">3. Finish</label>
-                    <button id="processBtn" disabled class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center">
-                        <span id="btnText">Crop & Generate 4x6 Sheet</span>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">3. Action</label>
+                    <button id="processBtn" disabled class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        Crop & Process
                     </button>
                 </div>
             </div>
@@ -54,15 +61,15 @@
             <div id="status" class="hidden p-3 rounded-lg text-center text-sm font-bold"></div>
 
             <div id="resultSection" class="hidden space-y-4 border-t pt-6">
-                <p class="text-center font-bold text-gray-800">Print Preview (4" x 6")</p>
+                <p class="text-center font-bold text-gray-800">Your 4"x6" Printable Sheet</p>
                 <canvas id="canvas" class="w-full shadow-md rounded border"></canvas>
-                <a id="downloadLink" class="block w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-center rounded-lg shadow transition active:scale-95">
-                    Download Print File
+                <a id="downloadLink" class="block w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-center rounded-lg shadow active:scale-95 transition">
+                    Download Image
                 </a>
             </div>
         </div>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
