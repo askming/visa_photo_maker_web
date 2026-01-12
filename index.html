@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Passport Studio (Tunable)</title>
+    <title>Passport Studio (Super Tunable)</title>
     <link rel="shortcut icon" href="#">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -34,7 +34,7 @@
         <div class="w-full md:w-1/3 bg-gray-50 p-6 border-r border-gray-200 flex flex-col gap-6 overflow-y-auto">
             <div class="border-b border-gray-200 pb-4">
                 <h1 class="text-xl font-bold text-gray-800">PASSPORT STUDIO</h1>
-                <p class="text-xs text-gray-500 uppercase tracking-wider">Tunable AI Engine</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Super Tunable Engine</p>
             </div>
 
             <div>
@@ -54,13 +54,19 @@
 
             <div id="tuningSection" class="hidden space-y-4 bg-white p-4 rounded-lg border border-blue-100 shadow-sm ring-1 ring-blue-500/20">
                 <div class="flex justify-between items-center">
-                    <label class="text-xs font-bold text-blue-700 uppercase">Mask Shrink (Fix Halo)</label>
+                    <label class="text-xs font-bold text-blue-700 uppercase">Mask Shrink (Halo)</label>
                     <span id="valShrink" class="text-xs font-mono text-gray-500">2.0</span>
                 </div>
-                <input type="range" id="rangeShrink" min="0" max="8" step="0.5" value="2.0">
+                <input type="range" id="rangeShrink" min="0" max="20" step="0.5" value="2.0">
 
                 <div class="flex justify-between items-center">
-                    <label class="text-xs font-bold text-blue-700 uppercase">Edge Softness</label>
+                    <label class="text-xs font-bold text-red-600 uppercase">Erosion Power</label>
+                    <span id="valPower" class="text-xs font-mono text-gray-500">200</span>
+                </div>
+                <input type="range" id="rangePower" min="150" max="254" step="1" value="200">
+
+                <div class="flex justify-between items-center">
+                    <label class="text-xs font-bold text-green-600 uppercase">Edge Softness</label>
                     <span id="valSoft" class="text-xs font-mono text-gray-500">1.0</span>
                 </div>
                 <input type="range" id="rangeSoft" min="0" max="5" step="0.5" value="1.0">
@@ -143,39 +149,37 @@
 
         // Sliders
         const rangeShrink = document.getElementById('rangeShrink');
+        const rangePower = document.getElementById('rangePower'); // NEW
         const rangeSoft = document.getElementById('rangeSoft');
+        
         const valShrink = document.getElementById('valShrink');
+        const valPower = document.getElementById('valPower'); // NEW
         const valSoft = document.getElementById('valSoft');
 
         // State
         let cropper = null;
         let segmenter = null;
-        let lastAIResult = null; // Stores raw AI data for tuning
+        let lastAIResult = null;
 
-        // --- 1. SETUP ENGINE ---
         function initEngine() {
             if (segmenter) return;
-            // Google MediaPipe Selfie Segmentation
             segmenter = new SelfieSegmentation({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
             });
-            segmenter.setOptions({ modelSelection: 1 }); // 1 = High Quality
+            segmenter.setOptions({ modelSelection: 1 });
             segmenter.onResults(onAIResults);
         }
 
-        // --- 2. UPLOAD & CROP ---
         uploadInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            // Reset UI
             if (cropper) cropper.destroy();
             welcomeState.classList.add('hidden');
             cropArea.classList.remove('hidden');
             resultArea.classList.add('hidden');
             tuningSection.classList.add('hidden');
             
-            // Activate Steps
             step2.classList.remove('opacity-50', 'pointer-events-none');
             step4.classList.remove('opacity-50', 'pointer-events-none');
 
@@ -196,26 +200,17 @@
             if (cropper) cropper.setAspectRatio(parseFloat(countrySelect.value));
         });
 
-        // --- 3. PROCESS ---
         processBtn.addEventListener('click', async () => {
             if (!cropper) return;
-            
             processBtn.disabled = true;
             processBtn.innerText = "Processing...";
             updateStatus("AI is detecting edges...");
-
-            // Get Crop
             const croppedCanvas = cropper.getCroppedCanvas({ width: 800, height: 800 });
-            
-            // Send to AI
             await segmenter.send({ image: croppedCanvas });
         });
 
-        // --- 4. RECEIVE AI RESULTS ---
         function onAIResults(results) {
-            lastAIResult = results; // Save for tuning
-            
-            // UI Switch
+            lastAIResult = results;
             cropArea.classList.add('hidden');
             resultArea.classList.remove('hidden');
             tuningSection.classList.remove('hidden');
@@ -223,59 +218,49 @@
             processBtn.innerText = "Remove Background";
             updateStatus("Done!", false);
             statusContainer.classList.add('hidden');
-
-            // Run the rendering pipeline
             renderOutput();
         }
 
-        // --- 5. THE RENDERING PIPELINE (TUNABLE) ---
         function renderOutput() {
             if (!lastAIResult) return;
 
             const shrink = parseFloat(rangeShrink.value);
+            const power = parseInt(rangePower.value); // NEW: 150-254
             const soft = parseFloat(rangeSoft.value);
             
             valShrink.innerText = shrink.toFixed(1);
+            valPower.innerText = power;
             valSoft.innerText = soft.toFixed(1);
 
             const w = lastAIResult.image.width;
             const h = lastAIResult.image.height;
 
-            // A. Prepare Mask
             const maskCanvas = document.createElement('canvas');
             maskCanvas.width = w; maskCanvas.height = h;
             const maskCtx = maskCanvas.getContext('2d');
-            
-            // Draw original AI mask
             maskCtx.drawImage(lastAIResult.segmentationMask, 0, 0, w, h);
 
-            // B. "Shrink" (Erosion) Logic
-            // We use pixel manipulation to shave off edges
-            const imageData = maskCtx.getImageData(0, 0, w, h);
-            const data = imageData.data;
-            
-            // To erode, we check neighbor transparency, but a simpler hack for web:
-            // Apply blur, then threshold HIGH. This pulls edges inward.
+            // --- 1. SHRINK & ERODE ---
+            // Apply blur
             if (shrink > 0) {
                 maskCtx.filter = `blur(${shrink}px)`;
-                maskCtx.drawImage(maskCanvas, 0, 0, w, h); // Draw over itself to blur
+                maskCtx.drawImage(maskCanvas, 0, 0, w, h);
                 maskCtx.filter = 'none';
 
-                // Now cut HARD
+                // Apply Aggressive Threshold (Erosion Power)
                 const blurData = maskCtx.getImageData(0, 0, w, h);
                 const px = blurData.data;
                 for (let i=0; i<px.length; i+=4) {
-                    // Only keep pixels that are VERY solid after blur
-                    if (px[i] < 200) px[i+3] = 0; // Cut
-                    else px[i+3] = 255; // Keep solid
+                    // px[i] is alpha/confidence. 
+                    // If Power is 250, we remove almost EVERYTHING except the solid center.
+                    if (px[i] < power) px[i+3] = 0; 
+                    else px[i+3] = 255;
                 }
                 maskCtx.putImageData(blurData, 0, 0);
             }
 
-            // C. Feather (Softness)
-            // Now we blur the sharp edge slightly to make it look natural
+            // --- 2. SOFTEN ---
             if (soft > 0) {
-                // Create temp to hold hard shape
                 const hardCanvas = document.createElement('canvas');
                 hardCanvas.width = w; hardCanvas.height = h;
                 hardCanvas.getContext('2d').drawImage(maskCanvas, 0, 0);
@@ -286,24 +271,20 @@
                 maskCtx.filter = 'none';
             }
 
-            // D. Composite
+            // --- 3. COMPOSITE ---
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = w; tempCanvas.height = h;
             const tempCtx = tempCanvas.getContext('2d');
             
-            // Draw final mask
             tempCtx.drawImage(maskCanvas, 0, 0);
-            // Composite Source
             tempCtx.globalCompositeOperation = 'source-in';
             tempCtx.drawImage(lastAIResult.image, 0, 0);
 
-            // E. Generate Final Sheet/Single
             const subjectImg = new Image();
             subjectImg.onload = () => generateFinalLayout(subjectImg);
             subjectImg.src = tempCanvas.toDataURL();
         }
 
-        // --- 6. LAYOUT GENERATOR ---
         function generateFinalLayout(subjectImg) {
             const isSingle = outputMode.value === 'single';
             const bg = document.getElementById('bgColor').value;
@@ -319,7 +300,6 @@
                 ctx.drawImage(subjectImg, 0, 0, targetW, targetH);
                 downloadLink.download = "passport-single.png";
             } else {
-                // Sheet 4x6
                 canvas.width = 1800; canvas.height = 1200;
                 const ctx = canvas.getContext('2d');
                 ctx.fillStyle = bg;
@@ -345,10 +325,10 @@
             downloadLink.href = canvas.toDataURL('image/jpeg', 0.95);
         }
 
-        // Listeners
         reprocessBtn.addEventListener('click', renderOutput);
-        rangeShrink.addEventListener('input', renderOutput); // Live update
-        rangeSoft.addEventListener('input', renderOutput);  // Live update
+        rangeShrink.addEventListener('input', renderOutput);
+        rangePower.addEventListener('input', renderOutput);
+        rangeSoft.addEventListener('input', renderOutput);
 
         editCropBtn.addEventListener('click', () => {
             resultArea.classList.add('hidden');
