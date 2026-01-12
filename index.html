@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Passport Studio (Super Tunable)</title>
+    <title>Passport Studio (Fixed)</title>
     <link rel="shortcut icon" href="#">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -34,7 +34,7 @@
         <div class="w-full md:w-1/3 bg-gray-50 p-6 border-r border-gray-200 flex flex-col gap-6 overflow-y-auto">
             <div class="border-b border-gray-200 pb-4">
                 <h1 class="text-xl font-bold text-gray-800">PASSPORT STUDIO</h1>
-                <p class="text-xs text-gray-500 uppercase tracking-wider">Super Tunable Engine</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Tunable AI Engine</p>
             </div>
 
             <div>
@@ -52,27 +52,35 @@
                 </select>
             </div>
 
-            <div id="tuningSection" class="hidden space-y-4 bg-white p-4 rounded-lg border border-blue-100 shadow-sm ring-1 ring-blue-500/20">
-                <div class="flex justify-between items-center">
-                    <label class="text-xs font-bold text-blue-700 uppercase">Mask Shrink (Halo)</label>
-                    <span id="valShrink" class="text-xs font-mono text-gray-500">2.0</span>
+            <div id="tuningSection" class="hidden space-y-5 bg-white p-4 rounded-lg border border-blue-100 shadow-sm ring-1 ring-blue-500/20">
+                
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-xs font-bold text-gray-700 uppercase">1. Edge Blur (Spread)</label>
+                        <span id="valShrink" class="text-xs font-mono text-blue-600">2.0px</span>
+                    </div>
+                    <input type="range" id="rangeShrink" min="0" max="10" step="0.5" value="2.0">
                 </div>
-                <input type="range" id="rangeShrink" min="0" max="20" step="0.5" value="2.0">
 
-                <div class="flex justify-between items-center">
-                    <label class="text-xs font-bold text-red-600 uppercase">Erosion Power</label>
-                    <span id="valPower" class="text-xs font-mono text-gray-500">200</span>
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-xs font-bold text-red-600 uppercase">2. Erosion Power (Cut)</label>
+                        <span id="valPower" class="text-xs font-mono text-red-600">200</span>
+                    </div>
+                    <input type="range" id="rangePower" min="1" max="254" step="1" value="200">
+                    <p class="text-[10px] text-gray-400 mt-1">Higher = Removes more edge halo</p>
                 </div>
-                <input type="range" id="rangePower" min="150" max="254" step="1" value="200">
 
-                <div class="flex justify-between items-center">
-                    <label class="text-xs font-bold text-green-600 uppercase">Edge Softness</label>
-                    <span id="valSoft" class="text-xs font-mono text-gray-500">1.0</span>
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-xs font-bold text-green-600 uppercase">3. Final Softness</label>
+                        <span id="valSoft" class="text-xs font-mono text-green-600">1.0px</span>
+                    </div>
+                    <input type="range" id="rangeSoft" min="0" max="4" step="0.5" value="1.0">
                 </div>
-                <input type="range" id="rangeSoft" min="0" max="5" step="0.5" value="1.0">
 
-                <button id="reprocessBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded transition">
-                    Update Edges
+                <button id="reprocessBtn" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold py-2 rounded transition border border-blue-200">
+                    Reset to Defaults
                 </button>
             </div>
 
@@ -149,18 +157,19 @@
 
         // Sliders
         const rangeShrink = document.getElementById('rangeShrink');
-        const rangePower = document.getElementById('rangePower'); // NEW
+        const rangePower = document.getElementById('rangePower');
         const rangeSoft = document.getElementById('rangeSoft');
         
         const valShrink = document.getElementById('valShrink');
-        const valPower = document.getElementById('valPower'); // NEW
+        const valPower = document.getElementById('valPower');
         const valSoft = document.getElementById('valSoft');
 
         // State
         let cropper = null;
         let segmenter = null;
-        let lastAIResult = null;
+        let lastAIResult = null; 
 
+        // --- 1. SETUP ENGINE ---
         function initEngine() {
             if (segmenter) return;
             segmenter = new SelfieSegmentation({
@@ -170,6 +179,7 @@
             segmenter.onResults(onAIResults);
         }
 
+        // --- 2. UPLOAD & CROP ---
         uploadInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -200,66 +210,80 @@
             if (cropper) cropper.setAspectRatio(parseFloat(countrySelect.value));
         });
 
+        // --- 3. PROCESS ---
         processBtn.addEventListener('click', async () => {
             if (!cropper) return;
+            
             processBtn.disabled = true;
             processBtn.innerText = "Processing...";
             updateStatus("AI is detecting edges...");
+
             const croppedCanvas = cropper.getCroppedCanvas({ width: 800, height: 800 });
             await segmenter.send({ image: croppedCanvas });
         });
 
         function onAIResults(results) {
             lastAIResult = results;
+            
             cropArea.classList.add('hidden');
             resultArea.classList.remove('hidden');
             tuningSection.classList.remove('hidden');
+            
             processBtn.disabled = false;
             processBtn.innerText = "Remove Background";
             updateStatus("Done!", false);
             statusContainer.classList.add('hidden');
+            
             renderOutput();
         }
 
+        // --- 4. THE PIPELINE (FIXED) ---
         function renderOutput() {
             if (!lastAIResult) return;
 
             const shrink = parseFloat(rangeShrink.value);
-            const power = parseInt(rangePower.value); // NEW: 150-254
+            const power = parseInt(rangePower.value);
             const soft = parseFloat(rangeSoft.value);
             
-            valShrink.innerText = shrink.toFixed(1);
+            valShrink.innerText = shrink.toFixed(1) + "px";
             valPower.innerText = power;
-            valSoft.innerText = soft.toFixed(1);
+            valSoft.innerText = soft.toFixed(1) + "px";
 
             const w = lastAIResult.image.width;
             const h = lastAIResult.image.height;
 
+            // A. Base Mask
             const maskCanvas = document.createElement('canvas');
             maskCanvas.width = w; maskCanvas.height = h;
             const maskCtx = maskCanvas.getContext('2d');
             maskCtx.drawImage(lastAIResult.segmentationMask, 0, 0, w, h);
 
-            // --- 1. SHRINK & ERODE ---
-            // Apply blur
+            // B. Step 1: Blur (Shrink Prep)
             if (shrink > 0) {
                 maskCtx.filter = `blur(${shrink}px)`;
-                maskCtx.drawImage(maskCanvas, 0, 0, w, h);
+                maskCtx.drawImage(maskCanvas, 0, 0, w, h); // Apply blur in place
                 maskCtx.filter = 'none';
-
-                // Apply Aggressive Threshold (Erosion Power)
-                const blurData = maskCtx.getImageData(0, 0, w, h);
-                const px = blurData.data;
-                for (let i=0; i<px.length; i+=4) {
-                    // px[i] is alpha/confidence. 
-                    // If Power is 250, we remove almost EVERYTHING except the solid center.
-                    if (px[i] < power) px[i+3] = 0; 
-                    else px[i+3] = 255;
-                }
-                maskCtx.putImageData(blurData, 0, 0);
             }
 
-            // --- 2. SOFTEN ---
+            // C. Step 2: Threshold (Erosion Power)
+            // BUG FIX: This logic is now OUTSIDE the shrink block. It always runs.
+            const imageData = maskCtx.getImageData(0, 0, w, h);
+            const data = imageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const confidence = data[i]; // Red channel (0-255)
+                
+                // If confidence is below Power slider, delete it.
+                // Power 254 = Very aggressive cut. Power 1 = Keep everything.
+                if (confidence < power) {
+                    data[i+3] = 0; // Transparent
+                } else {
+                    data[i+3] = 255; // Solid
+                }
+            }
+            maskCtx.putImageData(imageData, 0, 0);
+
+            // D. Step 3: Final Softening
             if (soft > 0) {
                 const hardCanvas = document.createElement('canvas');
                 hardCanvas.width = w; hardCanvas.height = h;
@@ -271,7 +295,7 @@
                 maskCtx.filter = 'none';
             }
 
-            // --- 3. COMPOSITE ---
+            // E. Composite
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = w; tempCanvas.height = h;
             const tempCtx = tempCanvas.getContext('2d');
@@ -285,6 +309,7 @@
             subjectImg.src = tempCanvas.toDataURL();
         }
 
+        // --- 5. LAYOUT ---
         function generateFinalLayout(subjectImg) {
             const isSingle = outputMode.value === 'single';
             const bg = document.getElementById('bgColor').value;
@@ -325,7 +350,17 @@
             downloadLink.href = canvas.toDataURL('image/jpeg', 0.95);
         }
 
-        reprocessBtn.addEventListener('click', renderOutput);
+        // --- LISTENERS ---
+        
+        // Reset button
+        reprocessBtn.addEventListener('click', () => {
+            rangeShrink.value = 2.0;
+            rangePower.value = 200;
+            rangeSoft.value = 1.0;
+            renderOutput();
+        });
+
+        // Live Sliders
         rangeShrink.addEventListener('input', renderOutput);
         rangePower.addEventListener('input', renderOutput);
         rangeSoft.addEventListener('input', renderOutput);
