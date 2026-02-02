@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Passport Studio (Final Fix)</title>
+    <title>Passport Photo Studio (Final Fix)</title>
     <link rel="shortcut icon" href="#">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -33,22 +33,23 @@
         
         <div class="w-full md:w-[350px] bg-white p-6 border-r border-gray-100 flex flex-col gap-6 overflow-y-auto shrink-0 z-10">
             <div class="border-b border-gray-100 pb-4">
-                <h1 class="text-xl font-bold tracking-tight text-gray-900">PASSPORT STUDIO</h1>
-                <p class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">Erosion Engine v2</p>
+                <h1 class="text-xl font-bold tracking-tight text-gray-900">PASSPORT PHOTO STUDIO</h1>
+                <p class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">Erosion Engine</p>
             </div>
 
             <div>
-                <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">1. Source Image</label>
+                <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">1. Upload Source Image</label>
                 <input type="file" id="upload" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-full file:bg-blue-50 file:text-blue-700 file:font-bold hover:file:bg-blue-100 cursor-pointer border border-dashed border-gray-300 rounded-lg p-1 transition-all">
             </div>
 
             <div id="step2" class="opacity-50 pointer-events-none transition-opacity">
-                <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">2. Standard Size</label>
+                <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">2. Choose A Standard Size</label>
                 <select id="countrySelect" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 font-medium focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="1" data-w="600" data-h="600">🇺🇸 US (2x2")</option>
-                    <option value="0.77" data-w="413" data-h="531">🇪🇺 UK/EU (35x45mm)</option>
-                    <option value="0.68" data-w="390" data-h="567">🇨🇳 China (33x48mm)</option>
-                    <option value="0.7" data-w="591" data-h="827">🇨🇦 Canada (50x70mm)</option>
+                    <option value="1" data-w="600" data-h="600" data-dim="2 x 2 in">🇺🇸 US, 🇵🇭 Philippines (2x2")</option>
+                    <option value="0.77" data-w="413" data-h="531" data-dim="35 x 45 mm">🇬🇧 UK, 🇪🇺 EU, 🇯🇵 Japan, 🇰🇷 South Korea (35x45mm)</option>
+                    <option value="0.68" data-w="390" data-h="567" data-dim="33 x 48 mm">🇨🇳 China, 🇭🇰 Hong Kong (33x48mm)</option>
+                    <option value="0.7" data-w="591" data-h="827" data-dim="50 x 70 mm">🇨🇦 Canada (50x70mm)</option>
+                    <option value="0.77" data-w="413" data-h="531" data-dim="35 x 45 mm">🇮🇳 India (35x45mm)</option>
                 </select>
             </div>
 
@@ -83,7 +84,7 @@
             </div>
 
             <div id="step4" class="opacity-50 pointer-events-none transition-opacity mt-auto">
-                <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">4. Export</label>
+                <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">4. Select Export Format</label>
                 <div class="grid grid-cols-[1fr_auto] gap-2 mb-3">
                     <select id="outputMode" class="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-gray-50 font-medium">
                         <option value="sheet">Sheet (4x6)</option>
@@ -108,6 +109,9 @@
         </div>
 
         <div class="flex-1 bg-gray-100 relative flex flex-col">
+            <div id="infoMargin" class="absolute top-6 left-6 z-40 bg-white/95 border border-gray-200 rounded-md p-3 text-xs text-gray-700 shadow-sm max-w-[320px]">
+                Upload an image and choose a country to see prepared size.
+            </div>
             
             <div class="absolute inset-0 z-0 opacity-10" style="background-image: radial-gradient(#000 1px, transparent 1px); background-size: 20px 20px;"></div>
 
@@ -138,6 +142,12 @@
 
         </div>
     </div>
+
+    <footer class="mt-6 py-3 text-center text-xs text-gray-500">
+        <div class="max-w-6xl mx-auto flex items-center justify-center">
+            <a href="https://github.com/askming/visa_photo_maker_web" target="_blank" class="text-blue-600 underline">copy right, @askming</a>
+        </div>
+    </footer>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
@@ -333,6 +343,14 @@
             const targetW = parseInt(option.dataset.w) || 600;
             const targetH = parseInt(option.dataset.h) || 600;
 
+            // Update the white-margin info box with prepared dimension and credit
+            const infoEl = document.getElementById('infoMargin');
+            if (infoEl) {
+                const countryLabel = option.text.split('(')[0].trim();
+                const dimText = option.dataset.dim || `${targetW} x ${targetH}`;
+                infoEl.innerHTML = `Passport photo for ${countryLabel}, dimension: ${dimText}<br><a href="https://askming.github.io/visa_photo_maker_web/" target="_blank" class="text-blue-600 underline">https://askming.github.io/visa_photo_maker_web/</a>`;
+            }
+
             if (isSingle) {
                 canvas.width = targetW; canvas.height = targetH;
                 const ctx = canvas.getContext('2d');
@@ -361,6 +379,83 @@
                         ctx.strokeRect(x, y, targetW, targetH);
                     }
                 }
+
+                // Detect side white gaps and draw a single horizontal info row there (clipped to gap)
+                const leftGap = startX;
+                const rightGap = canvas.width - (startX + cols * targetW);
+                const gapWidth = Math.max(leftGap, rightGap);
+                const gapX = (leftGap >= rightGap) ? 0 : (startX + cols * targetW);
+                const gapY = startY;
+                const gapH = rows * targetH;
+
+                if (gapWidth > 40) {
+                    const countryLabel = option.text.split('(')[0].trim();
+                    const dimText = option.dataset.dim || `${targetW} x ${targetH}`;
+                    const creditFull = 'https://askming.github.io/visa_photo_maker_web/';
+                    const creditShort = creditFull.replace(/^https?:\/\//, '');
+                    // single-line text to be rotated so it reads along sheet width
+                    let single = `Passport photo for ${countryLabel}  |  dimension: ${dimText}  |  ${creditShort}`;
+
+                    // Clip to gap area so text never overlaps photos
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(gapX, gapY, gapWidth, gapH);
+                    ctx.clip();
+
+                    // Autosize font so the measured text width fits within the rotated available length (gapH)
+                    const maxFont = 28;
+                    const minFont = 8;
+                    let fontSize = maxFont;
+                    ctx.font = `600 ${fontSize}px Arial`;
+                    let textW = ctx.measureText(single).width;
+                    const padding = 24;
+                    while (textW > gapH - padding && fontSize > minFont) {
+                        fontSize -= 1;
+                        ctx.font = `600 ${fontSize}px Arial`;
+                        textW = ctx.measureText(single).width;
+                    }
+
+                    // If still too long, truncate the middle with ellipsis
+                    if (textW > gapH - padding) {
+                        let t = single;
+                        while (t.length > 6 && ctx.measureText(t + '...').width > gapH - padding) {
+                            t = t.slice(0, -1);
+                        }
+                        single = t + '...';
+                        textW = ctx.measureText(single).width;
+                    }
+
+                    // Determine rotation and origin near inner edge of gap, offset inward
+                    const innerPadding = 28;
+                    const angle = (leftGap >= rightGap) ? -Math.PI / 2 : Math.PI / 2;
+                    const originX = (leftGap >= rightGap) ? (gapX + gapWidth - innerPadding) : (gapX + innerPadding);
+                    const originY = gapY + gapH - innerPadding;
+
+                    ctx.translate(originX, originY);
+                    ctx.rotate(angle);
+                    ctx.font = `600 ${fontSize}px Arial`;
+                    ctx.textBaseline = 'top';
+
+                    // center the rotated single-line block within the gap width
+                    const yPos = -Math.floor((gapWidth - fontSize) / 2);
+                    // color credit substring if present
+                    const creditIndex = single.indexOf(creditShort);
+                    if (creditIndex >= 0) {
+                        const before = single.substring(0, creditIndex);
+                        const after = single.substring(creditIndex);
+                        ctx.fillStyle = '#111827';
+                        ctx.fillText(before, 0, yPos);
+                        const beforeW = ctx.measureText(before).width;
+                        ctx.fillStyle = '#2563eb';
+                        ctx.fillText(after, beforeW, yPos);
+                    } else {
+                        ctx.fillStyle = '#111827';
+                        ctx.fillText(single, 0, yPos);
+                    }
+
+                    ctx.restore();
+                }
+
                 downloadLink.download = "passport-sheet.jpg";
             }
             downloadLink.href = canvas.toDataURL('image/jpeg', 0.95);
